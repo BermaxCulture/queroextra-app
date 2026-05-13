@@ -1,0 +1,62 @@
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: ['./index.html', './src/**/*.{ts,tsx}'],
+  theme: {
+    extend: {
+      colors: {
+        'qe-yellow': '#F5C000',
+        'qe-yellow-hover': '#E0AF00',
+        'qe-yellow-pressed': '#C99D00',
+        'qe-yellow-subtle': '#FFF8E1',
+        'qe-yellow-text': '#7A5F00',
+        'qe-black': '#111111',
+        'qe-gray-900': '#1A1A1A',
+        'qe-gray-700': '#444444',
+        'qe-gray-500': '#6B6B6B',
+        'qe-gray-400': '#999999',
+        'qe-gray-200': '#E5E5E5',
+        'qe-gray-100': '#F4F4F4',
+        'qe-gray-50': '#FAFAFA',
+        'qe-white': '#FFFFFF',
+        'qe-bg-page': '#F7F7F7',
+        'qe-success': '#1A9E5C',
+        'qe-success-bg': '#E6F7EE',
+        'qe-error': '#D93025',
+        'qe-error-bg': '#FDECEA',
+        'qe-warning': '#E07B00',
+        'qe-warning-bg': '#FFF3E0',
+        'qe-navy': '#1A2332',
+      },
+      fontFamily: {
+        sans: ['DM Sans', 'sans-serif'],
+      },
+      borderRadius: {
+        'qe-xs': '4px',
+        'qe-sm': '8px',
+        'qe-md': '12px',
+        'qe-lg': '16px',
+        'qe-pill': '999px',
+      },
+      minHeight: {
+        touch: '44px',
+      },
+      fontSize: {
+        display: ['32px', { lineHeight: '1.1', letterSpacing: '-1px', fontWeight: '700' }],
+        h1: ['26px', { lineHeight: '1.2', letterSpacing: '-0.5px', fontWeight: '700' }],
+        h2: ['20px', { lineHeight: '1.3', letterSpacing: '-0.3px', fontWeight: '700' }],
+        h3: ['17px', { lineHeight: '1.4', fontWeight: '700' }],
+        body: ['15px', { lineHeight: '1.6' }],
+        caption: ['13px', { lineHeight: '1.5' }],
+        label: ['11px', { lineHeight: '1.4', letterSpacing: '0.5px', fontWeight: '700' }],
+        price: ['28px', { lineHeight: '1', letterSpacing: '-0.5px', fontWeight: '700' }],
+        'input-size': ['16px', { lineHeight: '1.5' }],
+      },
+      boxShadow: {
+        'qe-sm': '0 1px 3px rgba(0,0,0,0.08)',
+        'qe-md': '0 2px 8px rgba(0,0,0,0.10)',
+        'qe-lg': '0 4px 16px rgba(0,0,0,0.12)',
+      },
+    },
+  },
+  plugins: [],
+}
