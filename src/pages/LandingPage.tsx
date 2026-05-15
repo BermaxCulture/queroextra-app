@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { Link } from 'react-router-dom'
 import boneco from '@/assets/queroExtra-boneco.png'
-import { motion } from 'framer-motion'
+import { motion, type Variants } from 'framer-motion'
 import {
   ChevronDown,
   Briefcase,
@@ -15,7 +15,7 @@ import { useScrollAnimation } from '@/hooks/useScrollAnimation'
 
 // ─── Animation variants ─────────────────────────────────────────────────────
 
-const sectionVariants = {
+const sectionVariants: Variants = {
   hidden: { opacity: 0, y: 32 },
   visible: {
     opacity: 1,
@@ -24,22 +24,22 @@ const sectionVariants = {
   },
 }
 
-const staggerContainer = {
+const staggerContainer: Variants = {
   hidden: {},
   visible: { transition: { staggerChildren: 0.12 } },
 }
 
-const profileStagger = {
+const profileStagger: Variants = {
   hidden: {},
   visible: { transition: { staggerChildren: 0.15 } },
 }
 
-const fadeSlideUp = {
+const fadeSlideUp: Variants = {
   hidden: { opacity: 0, y: 40 },
   visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: 'easeOut' } },
 }
 
-const itemVariants = {
+const itemVariants: Variants = {
   hidden: { opacity: 0, y: 24 },
   visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } },
 }
