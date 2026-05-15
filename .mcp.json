@@ -1,8 +1,17 @@
 {
   "mcpServers": {
-    "mcp-server-queroextra": {
-      "type": "http",
-      "url": "https://mcp.supabase.com/mcp"
+    "supabase-mcp-server-queroextra": {
+      "$typeName": "exa.cascade_plugins_pb.CascadePluginCommandTemplate",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@supabase/mcp-server-supabase@latest",
+        "--access-token",
+        "YOUR_SUPABASE_ACCESS_TOKEN"
+      ],
+      "env": {
+        "SUPABASE_ACCESS_TOKEN": "YOUR_SUPABASE_ACCESS_TOKEN"
+      }
     }
   }
 }

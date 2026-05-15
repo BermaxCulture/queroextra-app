@@ -1,5 +1,6 @@
 {
   "enabledMcpjsonServers": [
-    "mcp-server-queroextra"
+    "mcp-server-queroextra",
+    "supabase-mcp-server-queroextra"
   ]
 }
