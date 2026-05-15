@@ -31,7 +31,7 @@ function App() {
             
             {/* Área do Contratante (Empresa) */}
             <Route 
-              path="/contratante/*" 
+              path="/empresa/*" 
               element={
                 <ProtectedRoute allowedRole="empresa">
                   <ContratanteHome />
@@ -41,7 +41,7 @@ function App() {
 
             {/* Área dos Extras (Freelancer) */}
             <Route 
-              path="/extras/*" 
+              path="/app/*" 
               element={
                 <ProtectedRoute allowedRole="freelancer">
                   <ExtrasHome />

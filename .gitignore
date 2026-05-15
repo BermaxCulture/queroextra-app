@@ -28,3 +28,4 @@ dist-ssr
 scratch/
 mcp_tools.json
 auth_logs.json
+*.mcp.json

@@ -58,10 +58,10 @@ export default function LoginPage() {
       // Redirecionamento por perfil
       switch (profile.tipo) {
         case 'freelancer':
-          navigate('/extras')
+          navigate('/app')
           break
         case 'empresa':
-          navigate('/contratante')
+          navigate('/empresa')
           break
         case 'admin':
           navigate('/admin')
@@ -108,15 +108,16 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-[#FAF7F2] flex flex-col items-center justify-center px-4 py-8">
-      <div className="w-full max-w-[400px] flex flex-col items-center">
-        {/* Logo */}
-        <div className="mb-10 text-center">
-          <h1 className="text-display font-bold text-qe-black">
+      <div className="w-full max-w-[400px]">
+        {/* Logo Centralizado */}
+        <div className="mb-12 text-center">
+          <h1 className="text-[40px] font-bold tracking-tight text-qe-black">
             Quero<span className="text-qe-yellow">Extra</span>
           </h1>
+          <p className="text-qe-gray-500 mt-2 font-medium">Acesse sua conta para continuar</p>
         </div>
 
-        <div className="w-full bg-white rounded-qe-lg p-8 shadow-qe-sm border border-qe-gray-200">
+        <div className="w-full bg-white rounded-[24px] p-8 shadow-qe-lg border border-qe-gray-100">
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
             <Input
               label="E-mail"

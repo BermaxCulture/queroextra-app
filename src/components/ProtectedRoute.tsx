@@ -26,7 +26,12 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
   // Se um papel específico é exigido e o perfil não bate
   if (allowedRole && profile?.tipo !== allowedRole) {
     // Redireciona para a home correta baseada no perfil real dele
-    const home = profile?.tipo === 'empresa' ? '/contratante' : '/extras'
+    const homeMap = {
+      freelancer: '/app',
+      empresa: '/empresa',
+      admin: '/admin'
+    }
+    const home = profile?.tipo ? homeMap[profile.tipo] : '/'
     return <Navigate to={home} replace />
   }
 
