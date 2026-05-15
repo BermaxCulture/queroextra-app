@@ -92,7 +92,7 @@ queroextra/
 
 ```env
 VITE_SUPABASE_URL=
-VITE_SUPABASE_ANON_KEY=
+VITE_SUPABASE_PUBLISHABLE_KEY=
 RESEND_API_KEY=
 # Stripe — NÃO implementar no MVP
 # VITE_STRIPE_PUBLIC_KEY=
@@ -217,7 +217,7 @@ Empresas com status != 'aprovado' não acessam /empresa/*.
 import { createClient } from '@supabase/supabase-js'
 export const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
+  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
 )
 ```
 
