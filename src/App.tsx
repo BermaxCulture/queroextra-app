@@ -5,6 +5,8 @@ import { ProtectedRoute } from '@/components/ProtectedRoute'
 
 // Páginas Públicas
 import LandingPage from '@/pages/LandingPage'
+import ParaFreelancers from '@/pages/ParaFreelancers'
+import ParaEmpresas from '@/pages/ParaEmpresas'
 import LoginPage from '@/pages/auth/LoginPage'
 import CadastroPage from '@/pages/auth/CadastroPage'
 import StylesPage from '@/pages/styles/StylesPage'
@@ -23,6 +25,8 @@ function App() {
           <Routes>
             {/* --- ROTAS PÚBLICAS --- */}
             <Route path="/" element={<LandingPage />} />
+            <Route path="/para-freelancers" element={<ParaFreelancers />} />
+            <Route path="/para-empresas" element={<ParaEmpresas />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/cadastro" element={<CadastroPage />} />
             <Route path="/styles" element={<StylesPage />} />
