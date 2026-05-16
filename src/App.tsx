@@ -11,6 +11,8 @@ import ParaEmpresas from '@/pages/ParaEmpresas'
 import LoginPage from '@/pages/auth/LoginPage'
 import CadastroPage from '@/pages/auth/CadastroPage'
 import StylesPage from '@/pages/styles/StylesPage'
+import TermosDeUso from '@/pages/TermosDeUso'
+import Privacidade from '@/pages/Privacidade'
 
 // Páginas Privadas
 import ContratanteHome from '@/pages/contratante/ContratanteHome'
@@ -42,6 +44,8 @@ function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/cadastro" element={<CadastroPage />} />
             <Route path="/styles" element={<StylesPage />} />
+            <Route path="/termos" element={<TermosDeUso />} />
+            <Route path="/privacidade" element={<Privacidade />} />
 
             {/* --- ROTAS PRIVADAS (PROTEGIDAS) --- */}
             

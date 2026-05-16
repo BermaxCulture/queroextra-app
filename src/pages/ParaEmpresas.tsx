@@ -342,7 +342,7 @@ export default function ParaEmpresas() {
 
       {/* ═══════════════════════════════════════ FOOTER */}
       <footer className="bg-qe-gray-900 border-t border-qe-gray-700 py-14 px-4">
-        <div className="max-w-6xl mx-auto grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-10 md:gap-12">
+        <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between gap-10">
           {/* Col 1: Brand */}
           <div>
             <div className="flex items-center gap-2 mb-3">
@@ -358,60 +358,18 @@ export default function ParaEmpresas() {
             <p className="text-[12px] text-qe-gray-500 font-sans">© 2026 QueroExtra</p>
           </div>
 
-          {/* Col 2: Plataforma */}
+          {/* Col 2: Legal */}
           <div>
             <h4 className="text-[11px] font-bold uppercase tracking-[0.8px] text-qe-yellow mb-4 font-sans">
-              Plataforma
+              Legal
             </h4>
             <ul className="flex flex-col gap-2.5">
-              {['Sobre Nós', 'Como Funciona', 'Privacidade'].map(link => (
-                <li key={link}>
-                  <a
-                    href="#"
-                    className="text-[14px] text-qe-gray-400 hover:text-qe-white transition-colors font-sans"
-                  >
-                    {link}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Col 3: Suporte */}
-          <div>
-            <h4 className="text-[11px] font-bold uppercase tracking-[0.8px] text-qe-yellow mb-4 font-sans">
-              Suporte
-            </h4>
-            <ul className="flex flex-col gap-2.5">
-              {['Central de Ajuda', 'Termos de Uso', 'Fale Conosco'].map(link => (
-                <li key={link}>
-                  <a
-                    href="#"
-                    className="text-[14px] text-qe-gray-400 hover:text-qe-white transition-colors font-sans"
-                  >
-                    {link}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Col 4: Para Empresas */}
-          <div>
-            <h4 className="text-[11px] font-bold uppercase tracking-[0.8px] text-qe-yellow mb-4 font-sans">
-              Para Empresas
-            </h4>
-            <ul className="flex flex-col gap-2.5">
-              {['Publicar vaga', 'Como contratar', 'Planos'].map(link => (
-                <li key={link}>
-                  <a
-                    href="#"
-                    className="text-[14px] text-qe-gray-400 hover:text-qe-white transition-colors font-sans"
-                  >
-                    {link}
-                  </a>
-                </li>
-              ))}
+              <li>
+                <Link to="/termos" className="text-[14px] text-qe-gray-400 hover:text-qe-white transition-colors font-sans">Termos de Uso</Link>
+              </li>
+              <li>
+                <Link to="/privacidade" className="text-[14px] text-qe-gray-400 hover:text-qe-white transition-colors font-sans">Privacidade</Link>
+              </li>
             </ul>
           </div>
         </div>
