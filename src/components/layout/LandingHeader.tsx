@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { Menu, X } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui'
@@ -8,6 +8,7 @@ import boneco from '@/assets/queroExtra-boneco.png'
 export function LandingHeader() {
   const [scrolled, setScrolled] = React.useState(false)
   const [menuOpen, setMenuOpen] = React.useState(false)
+  const { pathname } = useLocation()
 
   React.useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 10)
@@ -38,16 +39,34 @@ export function LandingHeader() {
         <nav className="hidden md:flex items-center gap-8">
           <Link
             to="/"
-            className="relative text-[15px] font-semibold text-qe-gray-900 font-sans pb-0.5 after:absolute after:left-0 after:right-0 after:-bottom-0.5 after:h-[2px] after:bg-qe-yellow after:rounded-full"
+            className={`text-[15px] font-sans transition-colors ${
+              pathname === '/'
+                ? 'font-semibold text-qe-gray-900 relative pb-0.5 after:absolute after:left-0 after:right-0 after:-bottom-0.5 after:h-[2px] after:bg-qe-yellow after:rounded-full'
+                : 'font-medium text-qe-gray-500 hover:text-qe-gray-900'
+            }`}
           >
             Início
           </Link>
-          <a
-            href="#como-funciona"
-            className="text-[15px] font-medium text-qe-gray-500 hover:text-qe-gray-900 transition-colors font-sans"
+          <Link
+            to="/para-freelancers"
+            className={`text-[15px] font-sans transition-colors ${
+              pathname === '/para-freelancers'
+                ? 'font-semibold text-qe-gray-900 relative pb-0.5 after:absolute after:left-0 after:right-0 after:-bottom-0.5 after:h-[2px] after:bg-qe-yellow after:rounded-full'
+                : 'font-medium text-qe-gray-500 hover:text-qe-gray-900'
+            }`}
           >
-            Como Funciona
-          </a>
+            Para Freelancers
+          </Link>
+          <Link
+            to="/para-empresas"
+            className={`text-[15px] font-sans transition-colors ${
+              pathname === '/para-empresas'
+                ? 'font-semibold text-qe-gray-900 relative pb-0.5 after:absolute after:left-0 after:right-0 after:-bottom-0.5 after:h-[2px] after:bg-qe-yellow after:rounded-full'
+                : 'font-medium text-qe-gray-500 hover:text-qe-gray-900'
+            }`}
+          >
+            Para Empresas
+          </Link>
         </nav>
 
         {/* Desktop CTAs */}
@@ -83,18 +102,31 @@ export function LandingHeader() {
           >
             <Link
               to="/"
-              className="text-[16px] font-semibold text-qe-gray-900 py-3 font-sans border-b border-qe-gray-100"
+              className={`text-[16px] py-3 font-sans border-b border-qe-gray-100 ${
+                pathname === '/' ? 'font-bold text-qe-gray-900' : 'font-medium text-qe-gray-700'
+              }`}
               onClick={closeMenu}
             >
               Início
             </Link>
-            <a
-              href="#como-funciona"
-              className="text-[16px] font-medium text-qe-gray-700 py-3 font-sans border-b border-qe-gray-100"
+            <Link
+              to="/para-freelancers"
+              className={`text-[16px] py-3 font-sans border-b border-qe-gray-100 ${
+                pathname === '/para-freelancers' ? 'font-bold text-qe-gray-900' : 'font-medium text-qe-gray-700'
+              }`}
               onClick={closeMenu}
             >
-              Como Funciona
-            </a>
+              Para Freelancers
+            </Link>
+            <Link
+              to="/para-empresas"
+              className={`text-[16px] py-3 font-sans border-b border-qe-gray-100 ${
+                pathname === '/para-empresas' ? 'font-bold text-qe-gray-900' : 'font-medium text-qe-gray-700'
+              }`}
+              onClick={closeMenu}
+            >
+              Para Empresas
+            </Link>
             <div className="flex flex-col gap-2 pt-3">
               <Link to="/login" onClick={closeMenu} className="block">
                 <Button variant="secondary" size="lg">Entrar</Button>
