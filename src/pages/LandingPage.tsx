@@ -118,9 +118,10 @@ export default function LandingPage() {
               variants={sectionVariants}
               initial="hidden"
               animate={heroInView ? 'visible' : 'hidden'}
+              className="flex flex-col items-center lg:items-start text-center lg:text-left"
             >
               {/* Tag pill */}
-              <div className="flex mb-6">
+              <div className="flex justify-center lg:justify-start mb-6">
                 <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-qe-pill bg-qe-white border border-qe-gray-200 text-[11px] font-bold tracking-[0.8px] uppercase text-qe-gray-700 font-sans shadow-qe-sm">
                   🍽 FOOD SERVICE · BRASIL
                 </span>
