@@ -1,4 +1,5 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { useEffect } from 'react'
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { ToastProvider } from '@/components/ui'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
@@ -17,11 +18,22 @@ import ExtrasHome from '@/pages/extras/ExtrasHome'
 
 const AdminDashboard = () => <div className="p-8"><h1>Dashboard Admin</h1></div>
 
+function ScrollToTop() {
+  const { pathname } = useLocation()
+
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [pathname])
+
+  return null
+}
+
 function App() {
   return (
     <AuthProvider>
       <ToastProvider>
         <Router>
+          <ScrollToTop />
           <Routes>
             {/* --- ROTAS PÚBLICAS --- */}
             <Route path="/" element={<LandingPage />} />
