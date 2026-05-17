@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { Button, Input, useToast } from '@/components/ui'
+import { getEmpresaPostLoginPath } from '@/services/empresa/empresaSignup'
 
 const loginSchema = z.object({
   email: z.string().email('E-mail inválido'),
@@ -60,9 +61,11 @@ export default function LoginPage() {
         case 'freelancer':
           navigate('/app')
           break
-        case 'empresa':
-          navigate('/empresa')
+        case 'empresa': {
+          const path = await getEmpresaPostLoginPath(authData.user.id)
+          navigate(path)
           break
+        }
         case 'admin':
           navigate('/admin')
           break

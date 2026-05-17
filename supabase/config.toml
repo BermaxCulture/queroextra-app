@@ -1,0 +1,10 @@
+project_id = "bgkbruloojndolgtring"
+
+[api]
+enabled = true
+
+[db]
+major_version = 17
+
+[functions.notify-admin-company-signup]
+verify_jwt = false

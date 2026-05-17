@@ -135,7 +135,7 @@ export default function ParaEmpresas() {
 
             {/* CTAs */}
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
-              <Link to="/cadastro?tipo=empresa" className="w-full sm:w-auto">
+              <Link to="/cadastro/empresa" className="w-full sm:w-auto">
                 <Button variant="primary" size="lg" className="sm:w-auto sm:min-w-[240px]">
                   Publicar vaga grátis →
                 </Button>
@@ -331,7 +331,7 @@ export default function ParaEmpresas() {
             </p>
 
             {/* CTA */}
-            <Link to="/cadastro?tipo=empresa" className="inline-block">
+            <Link to="/cadastro/empresa" className="inline-block">
               <Button variant="primary" size="lg" className="sm:min-w-[260px] text-[17px]">
                 Publicar vaga urgente ⚡
               </Button>
