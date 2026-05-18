@@ -86,24 +86,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       setSession(session)
       setUser(session?.user ?? null)
-      if (session?.user) {
-        loadUserData(session.user.id).finally(() => setLoading(false))
-      } else {
-        setLoading(false)
-      }
-    })
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setSession(session)
-      setUser(session?.user ?? null)
+      // TOKEN_REFRESHED só atualiza a sessão — não recarrega perfil nem toca no loading
+      if (event === 'TOKEN_REFRESHED') return
 
       if (session?.user) {
         setLoading(true)
-        await loadUserData(session.user.id)
-        setLoading(false)
+        try {
+          await loadUserData(session.user.id)
+        } finally {
+          setLoading(false)
+        }
       } else {
         setProfile(null)
         setCompany(null)

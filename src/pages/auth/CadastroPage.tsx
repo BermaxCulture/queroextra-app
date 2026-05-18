@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { Button, Input, useToast, Chip } from '@/components/ui'
+import { useAuth } from '@/contexts/AuthContext'
 import { FREELANCER_HABILIDADES } from '@/constants/freelancerSkills'
 import { formatCpf, isValidCpf, stripCpf } from '@/lib/validators/cpf'
 import { formatPhone, isValidWhatsAppPhone, stripPhone } from '@/lib/validators/phone'
@@ -93,6 +94,7 @@ export default function CadastroPage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const { showToast } = useToast()
+  const { refreshProfile } = useAuth()
 
   useEffect(() => {
     if (searchParams.get('tipo') === 'empresa') {
@@ -157,14 +159,20 @@ export default function CadastroPage() {
       if (error) throw error
 
       if (authData.user && authData.session) {
+        // Auto-confirm ativo: sessão criada imediatamente, perfil pode não existir
+        // ainda no contexto (race com onAuthStateChange). Cria e recarrega.
         await createFreelancerProfile(authData.user.id, data)
+        await refreshProfile()
+        showToast('Cadastro realizado com sucesso!', 'success')
+        navigate('/app')
+      } else {
+        // Email confirmation necessário: usuário precisa confirmar antes de acessar
+        showToast(
+          'Cadastro realizado! Verifique seu e-mail para confirmar a conta.',
+          'success'
+        )
+        navigate('/login')
       }
-
-      showToast(
-        'Cadastro realizado! Verifique seu e-mail para confirmar a conta.',
-        'success'
-      )
-      navigate('/login')
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : 'Erro ao realizar cadastro.'

@@ -5,9 +5,10 @@ import { useAuth } from '@/contexts/AuthContext'
 interface ProtectedRouteProps {
   children: React.ReactNode
   allowedRole?: 'freelancer' | 'empresa' | 'admin'
+  loginPath?: string
 }
 
-export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRole }) => {
+export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRole, loginPath = '/login' }) => {
   const { user, profile, loading } = useAuth()
   const location = useLocation()
 
@@ -20,7 +21,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
   }
 
   if (!user) {
-    return <Navigate to="/login" state={{ from: location }} replace />
+    return <Navigate to={loginPath} state={{ from: location }} replace />
   }
 
   // Se um papel específico é exigido e o perfil não bate
