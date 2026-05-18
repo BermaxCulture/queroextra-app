@@ -10,6 +10,10 @@ import ParaFreelancers from '@/pages/ParaFreelancers'
 import ParaEmpresas from '@/pages/ParaEmpresas'
 import LoginPage from '@/pages/auth/LoginPage'
 import CadastroPage from '@/pages/auth/CadastroPage'
+import CadastroEmpresaEtapa1Page from '@/pages/auth/CadastroEmpresaEtapa1Page'
+import CadastroEmpresaEtapa2Page from '@/pages/auth/CadastroEmpresaEtapa2Page'
+import EmpresaAguardandoPage from '@/pages/empresa/EmpresaAguardandoPage'
+import { EmpresaRouteGuard } from '@/components/empresa/EmpresaRouteGuard'
 import StylesPage from '@/pages/styles/StylesPage'
 import TermosDeUso from '@/pages/TermosDeUso'
 import Privacidade from '@/pages/Privacidade'
@@ -43,20 +47,37 @@ function App() {
             <Route path="/para-empresas" element={<ParaEmpresas />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/cadastro" element={<CadastroPage />} />
+            <Route path="/cadastro/empresa" element={<CadastroEmpresaEtapa1Page />} />
+            <Route
+              path="/cadastro/empresa/documentos"
+              element={<CadastroEmpresaEtapa2Page />}
+            />
             <Route path="/styles" element={<StylesPage />} />
             <Route path="/termos" element={<TermosDeUso />} />
             <Route path="/privacidade" element={<Privacidade />} />
 
             {/* --- ROTAS PRIVADAS (PROTEGIDAS) --- */}
             
-            {/* Área do Contratante (Empresa) */}
-            <Route 
-              path="/empresa/*" 
+            {/* Empresa — aguardando aprovação (documentos já enviados) */}
+            <Route
+              path="/empresa/aguardando"
               element={
                 <ProtectedRoute allowedRole="empresa">
-                  <ContratanteHome />
+                  <EmpresaAguardandoPage />
                 </ProtectedRoute>
-              } 
+              }
+            />
+
+            {/* Área do Contratante (Empresa aprovada) */}
+            <Route
+              path="/empresa/*"
+              element={
+                <ProtectedRoute allowedRole="empresa">
+                  <EmpresaRouteGuard>
+                    <ContratanteHome />
+                  </EmpresaRouteGuard>
+                </ProtectedRoute>
+              }
             />
 
             {/* Área dos Extras (Freelancer) */}
