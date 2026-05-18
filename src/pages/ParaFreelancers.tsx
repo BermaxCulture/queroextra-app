@@ -224,7 +224,7 @@ export default function ParaFreelancers() {
 
             {/* CTAs */}
             <div className="flex flex-col sm:flex-row gap-3 justify-center mb-8">
-              <Link to="/cadastro" className="w-full sm:w-auto">
+              <Link to="/cadastro?tipo=freelancer" className="w-full sm:w-auto">
                 <Button variant="primary" size="lg" className="sm:w-auto sm:min-w-[200px]">
                   Quero trabalhar →
                 </Button>
@@ -367,7 +367,7 @@ export default function ParaFreelancers() {
             >
               {vagasMockadas.map(vaga => (
                 <motion.div key={vaga.id} variants={itemVariants}>
-                  <JobCard {...vaga} onApply={() => navigate('/cadastro')} />
+                  <JobCard {...vaga} onApply={() => navigate('/cadastro?tipo=freelancer')} />
                 </motion.div>
               ))}
             </motion.div>
@@ -457,7 +457,7 @@ export default function ParaFreelancers() {
 
             {/* CTAs */}
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
-              <Link to="/cadastro" className="w-full sm:w-auto">
+              <Link to="/cadastro?tipo=empresa" className="w-full sm:w-auto">
                 <Button variant="primary" size="lg" className="sm:w-auto sm:min-w-[220px]">
                   Publicar vaga grátis
                 </Button>

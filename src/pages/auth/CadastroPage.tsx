@@ -1,79 +1,287 @@
 import { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
-import { useForm } from 'react-hook-form'
+import { useNavigate, Link, useSearchParams } from 'react-router-dom'
+import { useForm, type FieldErrors } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Mail, Lock, User, ArrowRight, Eye, EyeOff } from 'lucide-react'
+import {
+  Mail,
+  Lock,
+  User,
+  ArrowRight,
+  Eye,
+  EyeOff,
+  Phone,
+  Building2,
+  Check,
+  X,
+  CreditCard,
+} from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { Button, Input, useToast, Chip } from '@/components/ui'
+import { FREELANCER_HABILIDADES } from '@/constants/freelancerSkills'
+import { formatCpf, isValidCpf, stripCpf } from '@/lib/validators/cpf'
+import { formatPhone, isValidWhatsAppPhone, stripPhone } from '@/lib/validators/phone'
 
-const cadastroSchema = z.object({
+const passwordSchema = z
+  .string()
+  .min(8, 'A senha deve ter pelo menos 8 caracteres')
+  .regex(/[A-Z]/, 'Deve conter pelo menos uma letra maiúscula')
+  .regex(/[a-z]/, 'Deve conter pelo menos uma letra minúscula')
+  .regex(/[0-9]/, 'Deve conter pelo menos um número')
+  .regex(/[^A-Za-z0-9]/, 'Deve conter pelo menos um caractere especial')
+
+const celularSchema = z
+  .string()
+  .min(14, 'Celular inválido')
+  .max(15, 'Celular inválido')
+  .refine(isValidWhatsAppPhone, 'Informe um celular WhatsApp válido: (00) 90000-0000')
+
+const freelancerCadastroSchema = z.object({
+  tipo: z.literal('freelancer'),
   nome: z.string().min(3, 'Nome deve ter pelo menos 3 caracteres'),
+  cpf: z
+    .string()
+    .min(14, 'CPF inválido')
+    .refine(isValidCpf, 'CPF inválido'),
   email: z.string().email('E-mail inválido'),
-  password: z.string().min(6, 'A senha deve ter pelo menos 6 caracteres'),
-  tipo: z.enum(['freelancer', 'empresa'], {
-    message: 'Selecione o tipo de conta',
+  celular: celularSchema,
+  password: passwordSchema,
+  habilidades: z
+    .array(z.enum(FREELANCER_HABILIDADES))
+    .min(1, 'Selecione ao menos uma habilidade'),
+  aceite_termos: z.literal(true, {
+    error: 'Você precisa aceitar os Termos de Uso',
   }),
 })
 
+const empresaCadastroSchema = z.object({
+  tipo: z.literal('empresa'),
+  nome: z.string().min(3, 'Nome deve ter pelo menos 3 caracteres'),
+  nome_empresa: z.string().min(2, 'Nome da empresa é obrigatório'),
+  email: z.string().email('E-mail inválido'),
+  celular: celularSchema,
+  password: passwordSchema,
+})
+
+const cadastroSchema = z.discriminatedUnion('tipo', [
+  freelancerCadastroSchema,
+  empresaCadastroSchema,
+])
+
 type CadastroData = z.infer<typeof cadastroSchema>
+type FreelancerCadastroData = z.infer<typeof freelancerCadastroSchema>
+type EmpresaCadastroData = z.infer<typeof empresaCadastroSchema>
+
+const passwordRules = [
+  { label: 'Mínimo 8 caracteres', test: (pw: string) => pw.length >= 8 },
+  { label: 'Uma letra maiúscula', test: (pw: string) => /[A-Z]/.test(pw) },
+  { label: 'Uma letra minúscula', test: (pw: string) => /[a-z]/.test(pw) },
+  { label: 'Um número', test: (pw: string) => /[0-9]/.test(pw) },
+  { label: 'Um símbolo (#, *, etc)', test: (pw: string) => /[^A-Za-z0-9]/.test(pw) },
+]
+
+async function createFreelancerProfile(
+  userId: string,
+  data: z.infer<typeof freelancerCadastroSchema>
+) {
+  const { error: profileError } = await supabase.from('profiles').upsert(
+    {
+      id: userId,
+      tipo: 'freelancer',
+      nome: data.nome,
+      email: data.email,
+      celular: stripPhone(data.celular),
+      status: 'ativo',
+    },
+    { onConflict: 'id' }
+  )
+  if (profileError) throw profileError
+
+  const { error: freelancerError } = await supabase.from('freelancers').upsert(
+    {
+      profile_id: userId,
+      cpf: stripCpf(data.cpf),
+      habilidades: data.habilidades,
+    },
+    { onConflict: 'profile_id' }
+  )
+  if (freelancerError) throw freelancerError
+}
+
+async function createEmpresaProfile(
+  userId: string,
+  data: z.infer<typeof empresaCadastroSchema>
+) {
+  const { error: profileError } = await supabase.from('profiles').upsert(
+    {
+      id: userId,
+      tipo: 'empresa',
+      nome: data.nome,
+      email: data.email,
+      celular: stripPhone(data.celular),
+      status: 'ativo',
+    },
+    { onConflict: 'id' }
+  )
+  if (profileError) throw profileError
+
+  const { error: companyError } = await supabase.from('companies').upsert(
+    {
+      profile_id: userId,
+      status: 'pendente',
+    },
+    { onConflict: 'profile_id' }
+  )
+  if (companyError) throw companyError
+}
 
 export default function CadastroPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [tipo, setTipo] = useState<'freelancer' | 'empresa'>('freelancer')
+  const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const { showToast } = useToast()
+
+  const initialTipo = (searchParams.get('tipo') as 'freelancer' | 'empresa') || 'freelancer'
+  const [tipo, setTipo] = useState<'freelancer' | 'empresa'>(initialTipo)
 
   const {
     register,
     handleSubmit,
     setValue,
+    watch,
+    reset,
     formState: { errors },
   } = useForm<CadastroData>({
     resolver: zodResolver(cadastroSchema),
-    defaultValues: { tipo: 'freelancer' },
+    defaultValues:
+      initialTipo === 'freelancer'
+        ? {
+            tipo: 'freelancer',
+            celular: '',
+            cpf: '',
+            habilidades: [],
+            aceite_termos: undefined,
+          }
+        : {
+            tipo: 'empresa',
+            celular: '',
+          },
   })
+
+  const passwordValue = watch('password', '')
+  const habilidades = watch('habilidades', []) ?? []
+  const isFreelancer = tipo === 'freelancer'
+
+  const switchTipo = (next: 'freelancer' | 'empresa') => {
+    setTipo(next)
+    if (next === 'freelancer') {
+      reset({
+        tipo: 'freelancer',
+        celular: '',
+        cpf: '',
+        habilidades: [],
+        aceite_termos: undefined,
+      })
+    } else {
+      reset({
+        tipo: 'empresa',
+        celular: '',
+      })
+    }
+  }
+
+  const handleCelularChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setValue('celular', formatPhone(e.target.value), { shouldValidate: true })
+  }
+
+  const handleCpfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setValue('cpf', formatCpf(e.target.value), { shouldValidate: true })
+  }
+
+  const toggleHabilidade = (skill: (typeof FREELANCER_HABILIDADES)[number]) => {
+    const current = habilidades as (typeof FREELANCER_HABILIDADES)[number][]
+    const next = current.includes(skill)
+      ? current.filter((h) => h !== skill)
+      : [...current, skill]
+    setValue('habilidades', next, { shouldValidate: true })
+  }
 
   const onSubmit = async (data: CadastroData) => {
     setLoading(true)
     try {
+      const metadata =
+        data.tipo === 'freelancer'
+          ? {
+              nome: data.nome,
+              tipo: data.tipo,
+              celular: stripPhone(data.celular),
+              cpf: stripCpf(data.cpf),
+              habilidades: data.habilidades,
+            }
+          : {
+              nome: data.nome,
+              tipo: data.tipo,
+              celular: stripPhone(data.celular),
+              nome_empresa: data.nome_empresa,
+            }
+
       const { data: authData, error } = await supabase.auth.signUp({
         email: data.email,
         password: data.password,
         options: {
-          data: {
-            nome: data.nome,
-            tipo: data.tipo,
-          },
+          emailRedirectTo: `${window.location.origin}/login`,
+          data: metadata,
         },
       })
 
       if (error) throw error
 
-      if (authData.user) {
-        showToast('Cadastro realizado! Verifique seu e-mail para confirmar a conta.', 'success')
-        navigate('/login')
+      if (authData.user && authData.session) {
+        if (data.tipo === 'freelancer') {
+          await createFreelancerProfile(authData.user.id, data)
+        } else {
+          await createEmpresaProfile(authData.user.id, data)
+        }
       }
-    } catch (error: any) {
-      showToast(error.message || 'Erro ao realizar cadastro.', 'error')
+
+      showToast(
+        'Cadastro realizado! Verifique seu e-mail para confirmar a conta.',
+        'success'
+      )
+      navigate('/login')
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : 'Erro ao realizar cadastro.'
+      showToast(message, 'error')
     } finally {
       setLoading(false)
     }
   }
 
+  const freelancerErrors = isFreelancer
+    ? (errors as FieldErrors<FreelancerCadastroData>)
+    : undefined
+  const empresaErrors = !isFreelancer
+    ? (errors as FieldErrors<EmpresaCadastroData>)
+    : undefined
+
   return (
     <div className="min-h-screen bg-[#FAF7F2] flex flex-col items-center justify-center px-4 py-8">
       <div className="w-full max-w-[400px] flex flex-col items-center">
         <div className="mb-10 text-center">
-          <h1 className="text-display font-bold text-qe-black">
+          <h1 className="text-[40px] font-bold tracking-tight text-qe-black">
             Quero<span className="text-qe-yellow">Extra</span>
           </h1>
-          <p className="text-body text-qe-gray-500 mt-2">Crie sua conta gratuitamente</p>
+          <p className="text-qe-gray-500 mt-2 font-medium">
+            {isFreelancer ? 'Cadastre-se como freelancer' : 'Crie sua conta gratuitamente'}
+          </p>
         </div>
 
-        <div className="w-full bg-white rounded-qe-lg p-8 shadow-qe-sm border border-qe-gray-200">
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+        <div className="w-full bg-white rounded-[24px] p-8 shadow-qe-lg border border-qe-gray-100">
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+            <input type="hidden" {...register('tipo')} />
+
             <div className="space-y-2">
               <p className="text-[13px] font-semibold text-qe-gray-700">Eu sou:</p>
               <div className="flex gap-2">
@@ -81,22 +289,26 @@ export default function CadastroPage() {
                   label="Freelancer"
                   variant="filter"
                   selected={tipo === 'freelancer'}
-                  onClick={() => {
-                    setTipo('freelancer')
-                    setValue('tipo', 'freelancer')
-                  }}
+                  onClick={() => switchTipo('freelancer')}
                 />
                 <Chip
                   label="Empresa"
                   variant="filter"
                   selected={tipo === 'empresa'}
-                  onClick={() => {
-                    setTipo('empresa')
-                    setValue('tipo', 'empresa')
-                  }}
+                  onClick={() => switchTipo('empresa')}
                 />
               </div>
             </div>
+
+            {tipo === 'empresa' && (
+              <Input
+                label="Nome da Empresa"
+                placeholder="Ex: QueroExtra LTDA"
+                icon={<Building2 size={20} />}
+                {...register('nome_empresa')}
+                errorMessage={empresaErrors?.nome_empresa?.message}
+              />
+            )}
 
             <Input
               label="Nome Completo"
@@ -106,32 +318,133 @@ export default function CadastroPage() {
               errorMessage={errors.nome?.message}
             />
 
+            {isFreelancer && (
+              <Input
+                label="CPF"
+                placeholder="000.000.000-00"
+                icon={<CreditCard size={20} />}
+                inputMode="numeric"
+                {...register('cpf')}
+                onChange={handleCpfChange}
+                errorMessage={freelancerErrors?.cpf?.message}
+              />
+            )}
+
             <Input
               label="E-mail"
               placeholder="seu@email.com"
               icon={<Mail size={20} />}
+              type="email"
+              autoComplete="email"
               {...register('email')}
               errorMessage={errors.email?.message}
             />
 
-            <div className="relative">
-              <Input
-                label="Senha"
-                type={showPassword ? 'text' : 'password'}
-                placeholder="••••••••"
-                icon={<Lock size={20} />}
-                {...register('password')}
-                errorMessage={errors.password?.message}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-4 top-[42px] text-qe-gray-400 hover:text-qe-gray-600 transition-colors"
-                tabIndex={-1}
-              >
-                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-              </button>
+            <Input
+              label="Celular (WhatsApp)"
+              placeholder="(00) 00000-0000"
+              icon={<Phone size={20} />}
+              inputMode="tel"
+              autoComplete="tel"
+              {...register('celular')}
+              onChange={handleCelularChange}
+              errorMessage={errors.celular?.message}
+            />
+
+            {isFreelancer && (
+              <div className="space-y-2">
+                <p className="text-[13px] font-semibold text-qe-gray-700">Suas habilidades</p>
+                <div className="flex flex-wrap gap-2">
+                  {FREELANCER_HABILIDADES.map((skill) => (
+                    <Chip
+                      key={skill}
+                      label={skill}
+                      variant="skill"
+                      selected={habilidades.includes(skill)}
+                      onClick={() => toggleHabilidade(skill)}
+                    />
+                  ))}
+                </div>
+                {freelancerErrors?.habilidades?.message && (
+                  <p className="text-[12px] text-qe-error" role="alert">
+                    {freelancerErrors.habilidades.message}
+                  </p>
+                )}
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <div className="relative">
+                <Input
+                  label="Senha"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="••••••••"
+                  icon={<Lock size={20} />}
+                  autoComplete="new-password"
+                  {...register('password')}
+                  errorMessage={errors.password?.message}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-[42px] text-qe-gray-400 hover:text-qe-gray-600 transition-colors"
+                  tabIndex={-1}
+                  aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                >
+                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                </button>
+              </div>
+
+              <div className="bg-qe-gray-50 rounded-qe-sm p-3 space-y-2 border border-qe-gray-100">
+                <p className="text-[11px] font-bold text-qe-gray-500 uppercase tracking-wider">
+                  Segurança da senha
+                </p>
+                <div className="grid grid-cols-1 gap-1.5">
+                  {passwordRules.map((rule, index) => {
+                    const isMet = rule.test(passwordValue)
+                    return (
+                      <div key={index} className="flex items-center gap-2">
+                        {isMet ? (
+                          <Check size={14} className="text-qe-success" />
+                        ) : (
+                          <X size={14} className="text-qe-gray-300" />
+                        )}
+                        <span
+                          className={`text-[12px] ${isMet ? 'text-qe-success font-medium' : 'text-qe-gray-500'}`}
+                        >
+                          {rule.label}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
             </div>
+
+            {isFreelancer && (
+              <label className="flex items-start gap-3 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  className="mt-1 h-4 w-4 rounded border-qe-gray-300 text-qe-yellow focus:ring-qe-yellow accent-qe-yellow"
+                  {...register('aceite_termos')}
+                />
+                <span className="text-[13px] text-qe-gray-600 leading-snug">
+                  Li e aceito os{' '}
+                  <Link
+                    to="/termos"
+                    target="_blank"
+                    className="font-semibold text-qe-black underline underline-offset-2 hover:text-qe-yellow transition-colors"
+                  >
+                    Termos de Uso
+                  </Link>
+                </span>
+              </label>
+            )}
+            {freelancerErrors?.aceite_termos?.message && (
+              <p className="text-[12px] text-qe-error -mt-3" role="alert">
+                {freelancerErrors.aceite_termos.message}
+              </p>
+            )}
 
             <Button
               type="submit"
@@ -140,7 +453,7 @@ export default function CadastroPage() {
               trailingIcon={<ArrowRight size={20} />}
               className="mt-2"
             >
-              Criar conta
+              {isFreelancer ? 'Concluir Cadastro' : 'Criar conta'}
             </Button>
           </form>
 
