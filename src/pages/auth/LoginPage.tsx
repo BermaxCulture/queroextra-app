@@ -64,7 +64,7 @@ export default function LoginPage() {
       // Redirecionamento baseado no tipo de usuário
       switch (tipo) {
         case 'freelancer':
-          navigate('/app')
+          navigate('/extras')
           break
         case 'empresa': {
           const path = await getEmpresaPostLoginPath(authData.user.id)

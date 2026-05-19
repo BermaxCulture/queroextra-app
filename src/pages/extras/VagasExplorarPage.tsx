@@ -8,6 +8,7 @@ import {
   SkeletonCard,
   EmptyState,
   useToast,
+  Input,
 } from '@/components/ui'
 import { Briefcase, Search } from 'lucide-react'
 
@@ -166,7 +167,7 @@ export default function VagasExplorarPage() {
           variant="main"
           onSearch={() => setShowSearchInput(!showSearchInput)}
           onNotification={() => showToast('Nenhuma notificação recente', 'info')}
-          onProfile={() => navigate('/app/perfil')}
+          onProfile={() => navigate('/extras/perfil')}
         />
       </div>
 
@@ -177,14 +178,12 @@ export default function VagasExplorarPage() {
           <p className="text-[13px] text-qe-gray-400 mt-1">Encontre os melhores turnos e estabelecimentos parceiros.</p>
         </div>
         {/* Barra de busca permanente para desktop */}
-        <div className="relative w-80">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-qe-gray-400 w-4 h-4" />
-          <input
-            type="text"
+        <div className="w-80">
+          <Input
+            icon={<Search size={16} />}
             placeholder="Buscar por cargo, empresa ou local..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 text-[14px] bg-qe-gray-50 border border-qe-gray-200 rounded-qe-md focus:outline-none focus:border-qe-yellow font-sans"
           />
         </div>
       </header>
@@ -192,14 +191,12 @@ export default function VagasExplorarPage() {
       {/* Input de busca dinâmico (apenas mobile) */}
       {showSearchInput && (
         <div className="lg:hidden px-4 py-2 bg-white border-b border-qe-gray-100 flex gap-2 items-center">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-qe-gray-400 w-4 h-4" />
-            <input
-              type="text"
+          <div className="flex-1">
+            <Input
+              icon={<Search size={16} />}
               placeholder="Buscar por cargo, empresa ou local..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 text-[14px] bg-qe-gray-50 border border-qe-gray-200 rounded-qe-md focus:outline-none focus:border-qe-yellow font-sans"
               autoFocus
             />
           </div>
@@ -208,7 +205,7 @@ export default function VagasExplorarPage() {
               setSearchTerm('')
               setShowSearchInput(false)
             }}
-            className="text-[13px] text-qe-gray-500 font-medium px-2 py-1"
+            className="text-[13px] text-qe-gray-500 font-medium px-2 py-1 shrink-0"
           >
             Cancelar
           </button>
@@ -257,7 +254,7 @@ export default function VagasExplorarPage() {
             {processedJobs.map((job) => (
               <div 
                 key={job.id} 
-                onClick={() => navigate(`/app/vaga/${job.id}`)}
+                onClick={() => navigate(`/extras/vaga/${job.id}`)}
                 className="cursor-pointer"
               >
                 <JobCard
@@ -271,7 +268,7 @@ export default function VagasExplorarPage() {
                   value={Number(job.valor)}
                   isUrgent={job.urgente}
                   tags={job.tags || []}
-                  onApply={() => navigate(`/app/vaga/${job.id}`)}
+                  onApply={() => navigate(`/extras/vaga/${job.id}`)}
                 />
               </div>
             ))}

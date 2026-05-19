@@ -136,9 +136,17 @@ export default function VagaDetalhesPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-qe-bg-page flex flex-col items-center justify-center p-4">
-        <div className="w-10 h-10 border-4 border-qe-yellow border-t-transparent rounded-full animate-spin"></div>
-        <p className="text-[14px] text-qe-gray-500 mt-4 font-medium">Carregando detalhes...</p>
+      <div className="min-h-screen bg-qe-bg-page flex flex-col pb-[80px]">
+        <div className="bg-white border-b border-qe-gray-100 sticky top-0 z-20">
+          <div className="shimmer h-14 w-full" />
+        </div>
+        <div className="max-w-6xl mx-auto w-full px-4 md:px-8 py-6 space-y-4">
+          <div className="shimmer h-8 w-2/3 rounded-qe-md" />
+          <div className="shimmer h-5 w-1/2 rounded-qe-md" />
+          <div className="shimmer h-5 w-1/3 rounded-qe-md" />
+          <div className="shimmer h-40 w-full rounded-qe-md mt-4" />
+          <div className="shimmer h-[52px] w-full rounded-qe-pill mt-6" />
+        </div>
       </div>
     )
   }
@@ -146,12 +154,12 @@ export default function VagaDetalhesPage() {
   if (!job) {
     return (
       <div className="min-h-screen bg-qe-bg-page flex flex-col">
-        <TopBar variant="inner" title="Vaga não encontrada" onBack={() => navigate('/app')} />
+        <TopBar variant="inner" title="Vaga não encontrada" onBack={() => navigate('/extras')} />
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
           <AlertTriangle className="w-16 h-16 text-qe-error mb-4" />
           <h2 className="text-h2 font-bold text-qe-gray-900 mb-2">Vaga não encontrada</h2>
           <p className="text-body text-qe-gray-500 mb-6">A vaga que você procura não está mais disponível ou foi encerrada.</p>
-          <Button variant="primary" onClick={() => navigate('/app')}>Voltar para Explorar</Button>
+          <Button variant="primary" onClick={() => navigate('/extras')}>Voltar para Explorar</Button>
         </div>
       </div>
     )
@@ -195,7 +203,7 @@ export default function VagaDetalhesPage() {
       {/* Header com Voltar */}
       <div className="bg-white border-b border-qe-gray-100 sticky top-0 z-20">
         <div className="max-w-6xl mx-auto">
-          <TopBar variant="inner" title={headerLogo} onBack={() => navigate('/app')} />
+          <TopBar variant="inner" title={headerLogo} onBack={() => navigate('/extras')} />
         </div>
       </div>
 

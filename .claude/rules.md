@@ -16,10 +16,27 @@
 - `forwardRef` obrigatório em todo componente de input; incluir `.displayName`
 - Usar `cva` para variantes de componentes — nunca lógica de classe inline
 - Animações: usar `springTap`, `fadeSlideUp`, `cardHover` — não inventar valores
+- **Loading state**: nunca usar `animate-spin` ou `animate-pulse` para listas ou conteúdo de página — usar `SkeletonCard` (listas de cards) ou `shimmer` (blocos inline). Spinner só em ações pontuais (botão, submit)
 - Ordem de imports: React → libs externas → UI barrel → hooks → lib/utils → tipos
 - Componentes: `PascalCase` · Hooks: `useCamelCase` · Utils: `camelCase` · Constantes: `UPPER_SNAKE_CASE`
 - Props interface nomeada como `NomeProps` (ex: `ButtonProps`, `JobCardProps`)
 - Formulários: React Hook Form + Zod — nunca validação manual de estado
+
+## Componentes de Design System — obrigatoriedade
+
+### Inputs e Selects
+- **Nunca** usar `<input>`, `<select>` ou `<textarea>` nativos — sempre `<Input />` ou `<Select />` do barrel
+- `<Input icon={...} />` para campos com ícone à esquerda — nunca posicionar ícone manualmente com `absolute`
+- `<Select options={[{ label, value }]} placeholder="..." />` para dropdowns — nunca estilizar `<select>` nativo diretamente
+- Formulários completos: React Hook Form + Zod; campos avulsos (busca, filtro): estado local com `<Input />` / `<Select />`
+
+### Tabs / abas
+- **Nunca** implementar abas com `<button>` e `border-b-2` manualmente — sempre `<Tabs tabs={...} activeTab={...} onChange={...} />`
+- `TabItem[]` importado via `import type { TabItem } from '@/components/ui'`
+
+### Navegação lateral
+- **Nunca** criar `<nav>` ou `<header>` desktop customizados para layouts com sidebar — sempre `<Sidebar items={SidebarItem[]} />`
+- `SidebarItem[]` importado via `import type { SidebarItem } from '@/components/ui'`
 
 ## Supabase
 - Sempre habilitar RLS antes de expor qualquer tabela — nunca expor dados de outros perfis
@@ -43,7 +60,7 @@
 - `TopBar` em páginas com header desktop próprio: envolver com `lg:hidden` e criar `<header className="hidden lg:flex ...">` ao lado
 
 ### Navegação
-- `/app/*` → `BottomNav` (mobile) + `Sidebar` (desktop) — gerenciados pelo `ExtrasHome.tsx`, não nas páginas filhas
+- `/extras/*` → `BottomNav` (mobile) + `Sidebar` (desktop) — gerenciados pelo `ExtrasHome.tsx`, não nas páginas filhas
 - `/admin/*` → `Sidebar` (desktop) — gerenciado pelo `AdminLayout.tsx`, não nas páginas filhas
 
 ### Modal / BottomSheet / ResponsiveSheet — qual usar

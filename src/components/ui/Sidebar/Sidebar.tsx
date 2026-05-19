@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { ZapGradient } from '../icons/ZapGradient'
+import boneco from '@/assets/queroExtra-boneco.png'
 import type { SidebarProps } from './Sidebar.types'
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -8,6 +8,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onChange,
   header,
   footer,
+  role,
 }) => {
   return (
     <aside
@@ -15,13 +16,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
       aria-label="Navegação lateral"
     >
       {/* Cabeçalho */}
-      <div className="flex items-center gap-2.5 px-5 py-[18px] border-b border-qe-gray-100">
+      <div className="flex items-center gap-3 px-5 py-5 border-b border-qe-gray-100">
         {header ?? (
           <>
-            <ZapGradient size={22} />
-            <span className="text-[16px] font-bold text-qe-gray-900 tracking-tight">
-              Quero<span className="text-qe-yellow">Extra</span>
-            </span>
+            <img src={boneco} alt="" className="h-8 w-auto shrink-0" aria-hidden="true" />
+            <div className="flex flex-col gap-0.5 min-w-0">
+              <span className="text-[15px] font-bold text-qe-gray-900 tracking-tight leading-none">
+                QueroExtra
+              </span>
+              {role && (
+                <span className="text-[10px] font-bold text-qe-gray-400 uppercase tracking-[1.5px] leading-none">
+                  {role === 'empresa' ? 'Empresa' : 'Freelancer'}
+                </span>
+              )}
+            </div>
           </>
         )}
       </div>

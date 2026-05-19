@@ -13,4 +13,5 @@ export interface SidebarProps {
   onChange: (value: string) => void
   header?: React.ReactNode
   footer?: React.ReactNode
+  role?: 'empresa' | 'freelancer'
 }

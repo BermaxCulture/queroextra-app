@@ -3,7 +3,7 @@ import {
   Button, Input, InputOTP, Chip, Badge, Avatar,
   BottomNav, TopBar, JobCard, StatCard, Tabs,
   Toast, useToast,
-  BottomSheet, EmptyState, SkeletonCard,
+  BottomSheet, EmptyState, SkeletonCard, Select,
 } from '@/components/ui'
 import { Search, Star, Briefcase, TrendingUp, DollarSign, Package } from 'lucide-react'
 import { ZapGradient } from '@/components/ui/icons/ZapGradient'
@@ -43,6 +43,8 @@ const StylesPage: React.FC = () => {
   const [sheetOpen, setSheetOpen] = React.useState(false)
   const [skillSelected, setSkillSelected] = React.useState<string[]>(['Bartender'])
   const [filterSelected, setFilterSelected] = React.useState('hoje')
+  const [selectValue, setSelectValue] = React.useState('')
+  const [selectValueError, setSelectValueError] = React.useState('')
 
   const toggleSkill = (s: string) =>
     setSkillSelected((prev) =>
@@ -300,6 +302,43 @@ const StylesPage: React.FC = () => {
         <Section title="15 · SkeletonCard">
           <div className="max-w-sm">
             <SkeletonCard />
+          </div>
+        </Section>
+
+        {/* SELECT */}
+        <Section title="16 · Select">
+          <div className="max-w-sm space-y-4">
+            <Select
+              label="Categoria"
+              placeholder="Selecione uma categoria..."
+              options={[
+                { label: 'Garçom / Garçonete', value: 'garcom' },
+                { label: 'Bartender', value: 'bartender' },
+                { label: 'Auxiliar de Cozinha', value: 'cozinha' },
+                { label: 'Hostess / Recepcionista', value: 'hostess' },
+                { label: 'Segurança', value: 'seguranca' },
+                { label: 'Copeiro(a)', value: 'copeiro' },
+              ]}
+              value={selectValue}
+              onChange={setSelectValue}
+            />
+            <Select
+              label="Com erro"
+              placeholder="Selecione..."
+              options={[
+                { label: 'Opção A', value: 'a' },
+                { label: 'Opção B', value: 'b' },
+              ]}
+              value={selectValueError}
+              onChange={setSelectValueError}
+              errorMessage="Selecione uma opção válida"
+            />
+            <Select
+              label="Desabilitado"
+              placeholder="Não disponível"
+              options={[]}
+              disabled
+            />
           </div>
         </Section>
       </div>

@@ -77,18 +77,18 @@ export default function ExtrasHome() {
 
   const getActiveTab = () => {
     const path = location.pathname
-    if (path.includes('/app/explorar')) return 'explorar'
-    if (path.includes('/app/extras')) return 'extras'
-    if (path.includes('/app/carteira')) return 'carteira'
-    if (path.includes('/app/perfil')) return 'perfil'
+    if (path.includes('/extras/explorar')) return 'explorar'
+    if (path.includes('/extras/extras')) return 'extras'
+    if (path.includes('/extras/carteira')) return 'carteira'
+    if (path.includes('/extras/perfil')) return 'perfil'
     return 'explorar'
   }
 
   const handleTabChange = (tab: string) => {
-    navigate(`/app/${tab}`)
+    navigate(`/extras/${tab}`)
   }
 
-  const showBottomNav = !location.pathname.includes('/app/vaga/')
+  const showBottomNav = !location.pathname.includes('/extras/vaga/')
 
   return (
     <div className="min-h-screen bg-qe-bg-page lg:flex">
@@ -97,6 +97,7 @@ export default function ExtrasHome() {
         items={freelancerSidebarItems}
         activeItem={getActiveTab()}
         onChange={handleTabChange}
+        role="freelancer"
       />
 
       {/* Conteúdo principal */}

@@ -304,8 +304,20 @@ export default function PerfilPage({ customProfileId }: PerfilPageProps) {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-qe-bg-page">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-qe-yellow"></div>
+      <div className="min-h-screen bg-qe-bg-page pb-28">
+        <div className="shimmer h-14 w-full" />
+        <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
+          <div className="flex items-center gap-4">
+            <div className="shimmer w-16 h-16 rounded-full shrink-0" />
+            <div className="flex-1 space-y-2">
+              <div className="shimmer h-5 w-1/2 rounded-qe-md" />
+              <div className="shimmer h-4 w-1/3 rounded-qe-md" />
+            </div>
+          </div>
+          <div className="shimmer h-32 w-full rounded-qe-md" />
+          <div className="shimmer h-24 w-full rounded-qe-md" />
+          <div className="shimmer h-24 w-full rounded-qe-md" />
+        </div>
       </div>
     )
   }
