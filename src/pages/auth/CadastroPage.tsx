@@ -165,9 +165,16 @@ export default function CadastroPage() {
         'success'
       )
       navigate('/login')
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : 'Erro ao realizar cadastro.'
+    } catch (error: any) {
+      console.error('Erro detalhado no cadastro de freelancer:', error)
+      let message = 'Erro ao realizar cadastro.'
+      if (error?.message) {
+        if (error.message === 'User already registered') {
+          message = 'Este e-mail já está cadastrado.'
+        } else {
+          message = `Erro ao realizar cadastro: ${error.message}`
+        }
+      }
       showToast(message, 'error')
     } finally {
       setLoading(false)

@@ -42,22 +42,27 @@ export default function LoginPage() {
 
       if (!authData.user) throw new Error('Usuário não encontrado')
 
-      // Buscar o perfil do usuário para saber o tipo
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('tipo')
-        .eq('id', authData.user.id)
-        .single()
+      // Tenta obter o tipo de usuário diretamente do JWT (metadados da sessão)
+      let tipo = authData.user.user_metadata?.tipo
 
-      if (profileError) {
-        console.error('Erro ao buscar perfil:', profileError)
-        // Se o perfil não existir, redireciona para a landing ou cadastro
-        navigate('/')
-        return
+      // Caso não esteja no JWT, faz fallback para a busca no banco de dados
+      if (!tipo) {
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('tipo')
+          .eq('id', authData.user.id)
+          .single()
+
+        if (profileError) {
+          console.error('Erro detalhado ao buscar tipo de perfil:', profileError)
+          navigate('/')
+          return
+        }
+        tipo = profile.tipo
       }
 
-      // Redirecionamento por perfil
-      switch (profile.tipo) {
+      // Redirecionamento baseado no tipo de usuário
+      switch (tipo) {
         case 'freelancer':
           navigate('/app')
           break
@@ -80,8 +85,10 @@ export default function LoginPage() {
         message = 'E-mail ou senha incorretos.'
       } else if (error.message === 'Email not confirmed') {
         message = 'Por favor, confirme seu e-mail antes de entrar.'
+      } else if (error.message) {
+        message = `Erro ao entrar: ${error.message}`
       }
-      
+      console.error('Erro detalhado no login:', error)
       showToast(message, 'error')
     } finally {
       setLoading(false)
@@ -104,8 +111,9 @@ export default function LoginPage() {
       })
       if (error) throw error
       showToast('Verifique sua caixa de entrada para redefinir a senha.', 'success')
-    } catch (error) {
-      showToast('Não foi possível enviar o e-mail de recuperação.', 'error')
+    } catch (error: any) {
+      console.error('Erro detalhado ao enviar e-mail de recuperação:', error)
+      showToast(`Não foi possível enviar o e-mail de recuperação: ${error?.message || String(error)}`, 'error')
     }
   }
 
