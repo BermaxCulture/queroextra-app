@@ -48,10 +48,12 @@ export default function AdminLoginPage() {
       }
 
       navigate('/admin')
-    } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : ''
-      if (msg === 'Invalid login credentials') {
+      showToast('Login realizado com sucesso.', 'success')
+    } catch (error: any) {
+      if (error.message === 'Invalid login credentials') {
         showToast('E-mail ou senha incorretos.', 'error')
+      } else if (error.message === 'Email not confirmed') {
+        showToast('Por favor, confirme seu e-mail antes de entrar.', 'error')
       } else {
         showToast('Ocorreu um erro ao entrar.', 'error')
       }

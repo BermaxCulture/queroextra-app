@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react'
 import type { User, Session } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 
@@ -50,8 +50,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [company, setCompany] = useState<Company | null>(null)
   const [freelancer, setFreelancer] = useState<Freelancer | null>(null)
   const [loading, setLoading] = useState(true)
+  const initializedRef = useRef(false)
 
-  const fetchProfile = async (userId: string) => {
+  const fetchProfile = useCallback(async (userId: string) => {
     console.log('[AuthContext] fetchProfile: iniciando busca...', userId)
     try {
       const { data, error } = await supabase
@@ -75,7 +76,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setProfile(null)
       return null
     }
-  }
+  }, [])
 
   const fetchCompany = useCallback(async (userId: string) => {
     console.log('[AuthContext] fetchCompany: iniciando busca...', userId)
@@ -129,7 +130,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [])
 
-  const loadUserData = async (userId: string) => {
+  const loadUserData = useCallback(async (userId: string) => {
     console.log('[AuthContext] loadUserData: iniciando carregamento de dados...', userId)
     const profileData = await fetchProfile(userId)
     console.log('[AuthContext] loadUserData: resultado de fetchProfile:', profileData?.tipo)
@@ -145,73 +146,55 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setFreelancer(null)
     }
     console.log('[AuthContext] loadUserData: finalizado.')
-  }
+  }, [fetchProfile, fetchCompany, fetchFreelancer])
 
   useEffect(() => {
-    console.log('[AuthContext] useEffect de inicialização disparado')
-    
+    // getSession() garante a inicialização mesmo no StrictMode do React (dupla montagem de efeitos).
+    // A flag initializedRef impede que onAuthStateChange concorra com getSession() em andamento.
     supabase.auth.getSession()
-      .then(({ data: { session } }) => {
-        console.log('[AuthContext] getSession resolvido. Session ativa:', !!session)
+      .then(async ({ data: { session } }) => {
         setSession(session)
         setUser(session?.user ?? null)
         if (session?.user) {
-          console.log('[AuthContext] getSession: usuário logado encontrado. Iniciando carregamento de perfil...')
-          loadUserData(session.user.id)
-            .then(() => console.log('[AuthContext] getSession: dados do usuário carregados.'))
-            .catch((err) => console.error('[AuthContext] getSession: erro ao carregar dados:', err))
-            .finally(() => {
-              console.log('[AuthContext] getSession: carregamento finalizado. setLoading(false)')
-              setLoading(false)
-            })
+          try {
+            await loadUserData(session.user.id)
+          } finally {
+            initializedRef.current = true
+            setLoading(false)
+          }
         } else {
-          console.log('[AuthContext] getSession: nenhuma sessão ativa encontrada. setLoading(false)')
+          initializedRef.current = true
           setLoading(false)
         }
       })
-      .catch((err) => {
-        console.error('[AuthContext] getSession rejeitado com erro:', {
-          message: err?.message || String(err),
-          details: err?.details,
-          raw: err
-        })
+      .catch(() => {
+        initializedRef.current = true
         setLoading(false)
       })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log(`[AuthContext] onAuthStateChange disparado. Evento: ${event}, Session ativa: ${!!session}`)
-      try {
-        setSession(session)
-        setUser(session?.user ?? null)
+      console.log(`[AuthContext] onAuthStateChange — evento: ${event}, session: ${!!session}`)
 
-        if (session?.user) {
-          console.log('[AuthContext] onAuthStateChange: usuário logado. setLoading(true) e carregando dados...')
-          setLoading(true)
-          await loadUserData(session.user.id)
-          console.log('[AuthContext] onAuthStateChange: dados do usuário carregados. setLoading(false)')
-          setLoading(false)
-        } else {
-          console.log('[AuthContext] onAuthStateChange: deslogado. Limpando estados e setLoading(false)')
-          setProfile(null)
-          setCompany(null)
-          setFreelancer(null)
-          setLoading(false)
-        }
-      } catch (err: any) {
-        console.error('[AuthContext] erro no callback de onAuthStateChange:', {
-          message: err?.message || String(err),
-          details: err?.details,
-          raw: err
-        })
-        setLoading(false)
+      // Aguarda getSession() terminar antes de processar qualquer evento
+      if (!initializedRef.current) return
+      // INITIAL_SESSION já foi tratado pelo getSession() acima.
+      // TOKEN_REFRESHED não requer re-fetch do perfil.
+      if (event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') return
+
+      setSession(session)
+      setUser(session?.user ?? null)
+
+      if (session?.user) {
+        loadUserData(session.user.id)
+      } else {
+        setProfile(null)
+        setCompany(null)
+        setFreelancer(null)
       }
     })
 
-    return () => {
-      console.log('[AuthContext] Limpando inscrição de auth')
-      subscription.unsubscribe()
-    }
-  }, [fetchCompany, fetchFreelancer])
+    return () => subscription.unsubscribe()
+  }, [])
 
   const signOut = async () => {
     await supabase.auth.signOut()
