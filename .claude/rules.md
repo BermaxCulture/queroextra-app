@@ -34,6 +34,24 @@
 - Stripe Connect: **não implementar** até instrução explícita — nada de pagamentos no MVP
 - Nenhuma feature fora do escopo da seção 12 do CONTEXT.md sem aprovação explícita
 
+## Responsividade Desktop
+
+- Breakpoint único de corte mobile → desktop: **`lg` (1024px)** — nunca usar `md:` para lógica de navegação ou layout estrutural
+- Nunca mostrar `BottomNav` em desktop — sempre envolver com `lg:hidden`
+- Nunca mostrar `Sidebar` em mobile — o componente já tem `hidden lg:flex` internamente, não adicionar por fora
+- Padding inferior que compensa BottomNav: sempre `pb-24 lg:pb-8`, nunca `pb-24` fixo
+- `TopBar` em páginas com header desktop próprio: envolver com `lg:hidden` e criar `<header className="hidden lg:flex ...">` ao lado
+
+### Navegação
+- `/app/*` → `BottomNav` (mobile) + `Sidebar` (desktop) — gerenciados pelo `ExtrasHome.tsx`, não nas páginas filhas
+- `/admin/*` → `Sidebar` (desktop) — gerenciado pelo `AdminLayout.tsx`, não nas páginas filhas
+
+### Modal / BottomSheet / ResponsiveSheet — qual usar
+- `BottomSheet` → primitivo **mobile only** (slide-up, drag) — usar apenas em features exclusivamente mobile
+- `Modal` → primitivo **desktop only** (centered, fade+scale, Escape fecha) — usar apenas em features exclusivamente desktop
+- `ResponsiveSheet` → **usar este** quando o mesmo gatilho existe em mobile e desktop — renderiza o primitivo correto via `matchMedia` internamente
+- Nunca colocar lógica `if (isDesktop)` dentro de um primitivo UI — encapsular no wrapper (`ResponsiveSheet`) ou no chamador
+
 ## Git
 - Branch: `dev/QUER-XX-descricao` (ex: `diogo/QUER-10-design-tokens`)
 - Commits: `tipo(QUER-XX): descrição em minúsculas` (ex: `feat(QUER-11): cria context.md`)

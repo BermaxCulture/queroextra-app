@@ -159,9 +159,9 @@ export default function VagasExplorarPage() {
   ]
 
   return (
-    <div className="pb-24 bg-qe-bg-page min-h-screen">
+    <div className="pb-24 lg:pb-8 bg-qe-bg-page min-h-screen">
       {/* TopBar Principal - apenas no Mobile */}
-      <div className="md:hidden">
+      <div className="lg:hidden">
         <TopBar
           variant="main"
           onSearch={() => setShowSearchInput(!showSearchInput)}
@@ -171,7 +171,7 @@ export default function VagasExplorarPage() {
       </div>
 
       {/* Header local apenas para Desktop */}
-      <header className="hidden md:flex bg-white border-b border-qe-gray-100 px-8 py-5 items-center justify-between sticky top-0 z-10 shadow-qe-sm">
+      <header className="hidden lg:flex bg-white border-b border-qe-gray-100 px-8 py-5 items-center justify-between sticky top-0 z-10 shadow-qe-sm">
         <div>
           <h1 className="text-[20px] font-bold text-qe-gray-900">Explorar Extras</h1>
           <p className="text-[13px] text-qe-gray-400 mt-1">Encontre os melhores turnos e estabelecimentos parceiros.</p>
@@ -191,7 +191,7 @@ export default function VagasExplorarPage() {
 
       {/* Input de busca dinâmico (apenas mobile) */}
       {showSearchInput && (
-        <div className="md:hidden px-4 py-2 bg-white border-b border-qe-gray-100 flex gap-2 items-center">
+        <div className="lg:hidden px-4 py-2 bg-white border-b border-qe-gray-100 flex gap-2 items-center">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-qe-gray-400 w-4 h-4" />
             <input

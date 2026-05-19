@@ -48,13 +48,16 @@ queroextra/
 │   │   │   ├── Chip/
 │   │   │   ├── Badge/
 │   │   │   ├── Avatar/
-│   │   │   ├── BottomNav/
+│   │   │   ├── BottomNav/     ← mobile only (<1024px)
+│   │   │   ├── Sidebar/       ← desktop only (≥1024px), hidden lg:flex interno
 │   │   │   ├── TopBar/
 │   │   │   ├── JobCard/
 │   │   │   ├── StatCard/
 │   │   │   ├── Tabs/
 │   │   │   ├── Toast/
-│   │   │   ├── BottomSheet/
+│   │   │   ├── BottomSheet/   ← primitivo mobile-only (slide-up, drag)
+│   │   │   ├── Modal/         ← primitivo desktop-only (centered, fade+scale)
+│   │   │   ├── ResponsiveSheet/ ← wrapper: BottomSheet em mobile, Modal em desktop
 │   │   │   ├── EmptyState/
 │   │   │   ├── SkeletonCard/
 │   │   │   └── index.ts       ← barrel export — sempre importar daqui
@@ -164,13 +167,16 @@ import { Button, Input, JobCard, Badge } from '@/components/ui'
 | Chip | skill (amarelo=selecionado), filter (preto=ativo) | Filtros |
 | Badge | urgent, pending, confirmed, warning, info, category | Status |
 | Avatar | xs/sm/md/lg/xl · verified | Foto de perfil |
-| BottomNav | freelancer, empresa | Nav mobile |
-| TopBar | main, inner | Header |
+| BottomNav | freelancer, empresa | Nav mobile (<1024px) — sempre envolver com `lg:hidden` |
+| Sidebar | — (props: items, activeItem, onChange, header?, footer?) | Nav desktop (≥1024px) — `hidden lg:flex` interno, não adicionar por fora |
+| TopBar | main, inner | Header mobile — ocultar com `lg:hidden` quando há header desktop |
 | JobCard | padrão, urgente (borda vermelha) | Card de vaga |
 | StatCard | — | KPIs |
 | Tabs | — | Abas underline amarelo |
 | Toast | success, error, info | Feedbacks |
-| BottomSheet | — | Modal mobile |
+| BottomSheet | — | Primitivo mobile-only — slide-up com drag. Usar direto só quando a tela for exclusivamente mobile |
+| Modal | — | Primitivo desktop-only — modal centralizado com fade+scale e Escape para fechar |
+| ResponsiveSheet | — | **Usar este** quando o mesmo gatilho existe em mobile e desktop. Internamente renderiza BottomSheet ou Modal conforme o breakpoint |
 | EmptyState | — | Estado vazio |
 | SkeletonCard | — | Loading |
 
@@ -431,6 +437,108 @@ Jira:           https://diiogoh04.atlassian.net/jira/software/projects/QUER/boar
 GitHub:         https://github.com/BermaxCulture/quero-extra
 Vercel:         https://queroextra-app.vercel.app
 ```
+
+---
+
+---
+
+## 16. Responsividade Desktop — Regras obrigatórias
+
+Breakpoint de corte: **`lg` (1024px)**. Nunca usar `md:` para lógica de navegação ou layout estrutural.
+
+### Navegação por rota
+
+| Rota | Mobile (<1024px) | Desktop (≥1024px) |
+|------|-----------------|-------------------|
+| `/app/*` | `BottomNav` fixo no rodapé | `Sidebar` lateral — gerenciada pelo `ExtrasHome.tsx` |
+| `/admin/*` | sem nav (links textuais) | `Sidebar` lateral — gerenciada pelo `AdminLayout.tsx` |
+
+### Layout raiz de cada área
+
+- **`ExtrasHome.tsx`** — wrapper de `/app/*`: usa `lg:flex`, insere `<Sidebar>` à esquerda e envolve `<BottomNav>` com `lg:hidden`.
+- **`AdminLayout.tsx`** — wrapper de `/admin/*`: idem para o painel admin.
+- As páginas filhas vivem em `flex-1 min-w-0` — **não usar `ml-60` ou `pl-60` manualmente**.
+
+### Padding inferior para BottomNav
+
+```tsx
+// Correto — compensa BottomNav apenas em mobile
+<div className="pb-24 lg:pb-8 ...">
+
+// Errado — deixa 96px de espaço morto em desktop
+<div className="pb-24 ...">
+```
+
+### TopBar vs header desktop
+
+```tsx
+{/* Ocultar TopBar no desktop quando há header próprio */}
+<div className="lg:hidden">
+  <TopBar variant="main" ... />
+</div>
+<header className="hidden lg:flex ...">
+  {/* header desktop com search bar, título, etc. */}
+</header>
+```
+
+### Sidebar — uso correto
+
+```tsx
+import { Sidebar } from '@/components/ui'
+import type { SidebarItem } from '@/components/ui'
+
+const items: SidebarItem[] = [
+  { value: 'explorar', label: 'Explorar', icon: <Compass size={20} /> },
+  { value: 'perfil',   label: 'Perfil',   icon: <User size={20} /> },
+  // badge?: number — exibe contador vermelho no item
+]
+
+<Sidebar
+  items={items}
+  activeItem={activeTab}           // comparado com item.value
+  onChange={(value) => navigate(`/app/${value}`)}
+  // header?: ReactNode  — substitui logo padrão "QueroExtra"
+  // footer?: ReactNode  — renderizado acima do border-t inferior
+/>
+```
+
+Para admin, usar paths completos como `value` e `header` customizado:
+```tsx
+const adminItems: SidebarItem[] = [
+  { value: '/admin', label: 'Painel', icon: <LayoutDashboard size={20} /> },
+  { value: '/admin/empresas-pendentes', label: 'Validar Empresas', icon: <Building2 size={20} />, badge: pendingCount },
+]
+<Sidebar items={adminItems} activeItem={location.pathname} onChange={(path) => navigate(path)} header={<span>Admin</span>} />
+```
+
+### Modal / BottomSheet / ResponsiveSheet — qual usar
+
+Os três são primitivos separados. Cada um faz uma coisa só:
+
+```
+BottomSheet  → mobile only  (slide-up, drag, handle)
+Modal        → desktop only (centered, fade+scale, Escape fecha)
+ResponsiveSheet → compõe os dois, escolhe em runtime via window.matchMedia
+```
+
+**Regra:** quando o mesmo conteúdo aparece em mobile E desktop, usar `ResponsiveSheet`:
+
+```tsx
+import { ResponsiveSheet } from '@/components/ui'
+
+<ResponsiveSheet open={isOpen} onClose={close} title="Título">
+  {/* mesmo JSX — o componente decide como renderizar */}
+</ResponsiveSheet>
+```
+
+Usar `BottomSheet` ou `Modal` diretamente só quando a tela/feature for exclusiva de um breakpoint.
+
+| Aspecto | BottomSheet (mobile) | Modal (desktop) |
+|---------|--------|---------|
+| Posição | Rodapé, slide-up | Centro do viewport, fade+scale |
+| Handle de drag | Visível | — |
+| Fechar | Arrastar / overlay | Overlay / tecla Escape |
+| Largura | 100% viewport | 520px fixo |
 
 ---
 
