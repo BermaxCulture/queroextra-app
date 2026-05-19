@@ -5,9 +5,10 @@ import { useAuth } from '@/contexts/AuthContext'
 interface ProtectedRouteProps {
   children: React.ReactNode
   allowedRole?: 'freelancer' | 'empresa' | 'admin'
+  loginPath?: string
 }
 
-export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRole }) => {
+export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRole, loginPath = '/login' }) => {
   const { user, profile, loading } = useAuth()
   const location = useLocation()
 
@@ -17,7 +18,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
 
   // 1. Se não está logado (e terminou de carregar a checagem inicial), vai para o login
   if (!loading && !user) {
-    return <Navigate to="/login" state={{ from: location }} replace />
+    return <Navigate to={loginPath} state={{ from: location }} replace />
   }
 
   // 2. Se o usuário estiver autenticado (JWT disponível)

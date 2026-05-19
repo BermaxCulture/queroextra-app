@@ -22,8 +22,9 @@ import Privacidade from '@/pages/Privacidade'
 // Páginas Privadas
 import ContratanteHome from '@/pages/contratante/ContratanteHome'
 import ExtrasHome from '@/pages/extras/ExtrasHome'
-
-const AdminDashboard = () => <div className="p-8"><h1>Dashboard Admin</h1></div>
+import AdminDashboard from '@/pages/admin/AdminDashboard'
+import AdminLoginPage from '@/pages/admin/AdminLoginPage'
+import ValidarEmpresas from '@/pages/admin/ValidarEmpresas'
 
 function ScrollToTop() {
   const { pathname } = useLocation()
@@ -99,13 +100,22 @@ function App() {
             />
 
             {/* Área Administrativa */}
-            <Route 
-              path="/admin/*" 
+            <Route path="/admin/login" element={<AdminLoginPage />} />
+            <Route
+              path="/admin"
               element={
-                <ProtectedRoute allowedRole="admin">
+                <ProtectedRoute allowedRole="admin" loginPath="/admin/login">
                   <AdminDashboard />
                 </ProtectedRoute>
-              } 
+              }
+            />
+            <Route
+              path="/admin/empresas-pendentes"
+              element={
+                <ProtectedRoute allowedRole="admin" loginPath="/admin/login">
+                  <ValidarEmpresas />
+                </ProtectedRoute>
+              }
             />
 
             {/* Fallback: Se não encontrar a rota, volta para a Landing Page */}
