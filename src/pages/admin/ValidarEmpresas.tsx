@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { CheckCircle, ChevronLeft, FileText, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { Badge, BottomSheet, Button, EmptyState, useToast } from '@/components/ui'
+import { Badge, ResponsiveSheet, Button, EmptyState, useToast } from '@/components/ui'
 
 interface EmpresaPendente {
   id: string
@@ -237,7 +237,7 @@ export default function ValidarEmpresas() {
       </div>
 
       {/* Modal */}
-      <BottomSheet open={!!selected} onClose={closeModal} title={selected?.profiles?.nome ?? 'Empresa'}>
+      <ResponsiveSheet open={!!selected} onClose={closeModal} title={selected?.profiles?.nome ?? 'Empresa'}>
         {selected && (
           <div className="space-y-5">
             {/* Badge + fechar */}
@@ -365,7 +365,7 @@ export default function ValidarEmpresas() {
             </div>
           </div>
         )}
-      </BottomSheet>
+      </ResponsiveSheet>
     </div>
   )
 }

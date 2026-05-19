@@ -194,7 +194,7 @@ export default function MeusExtrasPage() {
   ]
 
   return (
-    <div className="pb-24 bg-qe-bg-page min-h-screen">
+    <div className="pb-24 lg:pb-8 bg-qe-bg-page min-h-screen">
       {/* Header Fixo */}
       <header className="bg-white border-b border-qe-gray-100 px-4 md:px-8 py-5 sticky top-0 z-10 shadow-qe-sm">
         <div className="max-w-6xl mx-auto">

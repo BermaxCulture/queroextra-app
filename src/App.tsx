@@ -25,6 +25,7 @@ import ExtrasHome from '@/pages/extras/ExtrasHome'
 import AdminDashboard from '@/pages/admin/AdminDashboard'
 import AdminLoginPage from '@/pages/admin/AdminLoginPage'
 import ValidarEmpresas from '@/pages/admin/ValidarEmpresas'
+import AdminLayout from '@/pages/admin/AdminLayout'
 
 function ScrollToTop() {
   const { pathname } = useLocation()
@@ -105,7 +106,9 @@ function App() {
               path="/admin"
               element={
                 <ProtectedRoute allowedRole="admin" loginPath="/admin/login">
-                  <AdminDashboard />
+                  <AdminLayout>
+                    <AdminDashboard />
+                  </AdminLayout>
                 </ProtectedRoute>
               }
             />
@@ -113,7 +116,9 @@ function App() {
               path="/admin/empresas-pendentes"
               element={
                 <ProtectedRoute allowedRole="admin" loginPath="/admin/login">
-                  <ValidarEmpresas />
+                  <AdminLayout>
+                    <ValidarEmpresas />
+                  </AdminLayout>
                 </ProtectedRoute>
               }
             />

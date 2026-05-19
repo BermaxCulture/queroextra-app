@@ -4,11 +4,7 @@ import type { BottomSheetProps } from './BottomSheet.types'
 
 export const BottomSheet: React.FC<BottomSheetProps> = ({ open, onClose, children, title }) => {
   React.useEffect(() => {
-    if (open) {
-      document.body.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
-    }
+    document.body.style.overflow = open ? 'hidden' : ''
     return () => { document.body.style.overflow = '' }
   }, [open])
 
@@ -41,11 +37,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({ open, onClose, childre
             onDragEnd={(_: unknown, info: { offset: { y: number } }) => {
               if (info.offset.y > 80) onClose()
             }}
-            className={[
-              'fixed bottom-0 left-0 right-0 z-50 bg-qe-white rounded-t-qe-lg',
-              'max-h-[90vh] overflow-y-auto',
-              'md:w-[480px] md:mx-auto md:rounded-qe-lg md:bottom-auto md:top-[10vh]',
-            ].join(' ')}
+            className="fixed bottom-0 left-0 right-0 z-50 bg-qe-white rounded-t-qe-lg max-h-[90vh] overflow-y-auto"
           >
             <div className="w-9 h-1 bg-qe-gray-200 rounded-full mx-auto mt-3 mb-5" aria-hidden="true" />
             {title && (

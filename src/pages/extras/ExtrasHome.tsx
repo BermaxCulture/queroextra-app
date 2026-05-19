@@ -3,12 +3,21 @@ import {
   BottomNav,
   TopBar,
   Button,
+  Sidebar,
 } from '@/components/ui'
-import { Wallet } from 'lucide-react'
+import type { SidebarItem } from '@/components/ui'
+import { Compass, Briefcase, Wallet, User } from 'lucide-react'
 import VagasExplorarPage from './VagasExplorarPage'
 import VagaDetalhesPage from './VagaDetalhesPage'
 import MeusExtrasPage from './MeusExtrasPage'
 import PerfilPage from './PerfilPage'
+
+const freelancerSidebarItems: SidebarItem[] = [
+  { value: 'explorar', label: 'Explorar', icon: <Compass size={20} /> },
+  { value: 'extras', label: 'Meus Extras', icon: <Briefcase size={20} /> },
+  { value: 'carteira', label: 'Carteira', icon: <Wallet size={20} /> },
+  { value: 'perfil', label: 'Perfil', icon: <User size={20} /> },
+]
 
 // ==========================================
 // ABA: CARTEIRA (MOCK PREMIUM)
@@ -45,7 +54,7 @@ function CarteiraPage() {
               <Wallet size={20} />
             </div>
             <div>
-              <h3 className="text-[15px] font-bold text-qe-gray-950">Recebimento Instantâneo</h3>
+              <h3 className="text-[15px] font-bold text-qe-gray-900">Recebimento Instantâneo</h3>
               <p className="text-[12px] text-qe-gray-400 mt-0.5">Configure sua conta para receber em até 24h.</p>
             </div>
           </div>
@@ -66,7 +75,6 @@ export default function ExtrasHome() {
   const location = useLocation()
   const navigate = useNavigate()
 
-  // Determinar tab ativa com base na rota
   const getActiveTab = () => {
     const path = location.pathname
     if (path.includes('/app/explorar')) return 'explorar'
@@ -83,9 +91,16 @@ export default function ExtrasHome() {
   const showBottomNav = !location.pathname.includes('/app/vaga/')
 
   return (
-    <div className="min-h-screen bg-qe-bg-page flex flex-col justify-between">
-      {/* Rotas Internas */}
-      <div className="flex-1">
+    <div className="min-h-screen bg-qe-bg-page lg:flex">
+      {/* Sidebar — visível apenas no desktop (≥1024px) */}
+      <Sidebar
+        items={freelancerSidebarItems}
+        activeItem={getActiveTab()}
+        onChange={handleTabChange}
+      />
+
+      {/* Conteúdo principal */}
+      <div className="flex-1 min-w-0">
         <Routes>
           <Route path="/" element={<Navigate to="explorar" replace />} />
           <Route path="explorar" element={<VagasExplorarPage />} />
@@ -97,9 +112,9 @@ export default function ExtrasHome() {
         </Routes>
       </div>
 
-      {/* Bottom Nav Fixo */}
+      {/* BottomNav — visível apenas no mobile (<1024px) */}
       {showBottomNav && (
-        <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto z-10">
+        <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto z-10 lg:hidden">
           <BottomNav
             variant="freelancer"
             activeTab={getActiveTab()}
