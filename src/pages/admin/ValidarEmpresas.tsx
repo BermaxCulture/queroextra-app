@@ -79,7 +79,7 @@ export default function ValidarEmpresas() {
     if (error) {
       showToast('Erro ao carregar empresas.', 'error')
     } else {
-      setEmpresas((data ?? []) as EmpresaPendente[])
+      setEmpresas((data ?? []) as unknown as EmpresaPendente[])
     }
     setLoading(false)
   }

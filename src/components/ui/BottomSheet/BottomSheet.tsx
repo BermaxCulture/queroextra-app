@@ -44,7 +44,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({ open, onClose, childre
             className={[
               'fixed bottom-0 left-0 right-0 z-50 bg-qe-white rounded-t-qe-lg',
               'max-h-[90vh] overflow-y-auto',
-              'md:left-1/2 md:-translate-x-1/2 md:w-[480px] md:rounded-qe-lg md:bottom-auto md:top-1/2 md:-translate-y-1/2',
+              'md:w-[480px] md:mx-auto md:rounded-qe-lg md:bottom-auto md:top-[10vh]',
             ].join(' ')}
           >
             <div className="w-9 h-1 bg-qe-gray-200 rounded-full mx-auto mt-3 mb-5" aria-hidden="true" />
