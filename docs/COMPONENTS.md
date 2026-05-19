@@ -598,5 +598,107 @@ Placeholder animado com shimmer que replica o layout do JobCard durante o carreg
 ### Regras de uso
 - Renderize entre 2 e 4 instâncias para simular um feed realista — nunca apenas uma.
 - Use exclusivamente como substituto do JobCard; para outros skeletons, crie componentes dedicados.
-- Substitua os SkeletonCards pelos JobCards reais assim que os dados estiverem disponíveis — não os sobreponha.
+- Substituta os SkeletonCards pelos JobCards reais assim que os dados estiverem disponíveis — não os sobreponha.
 - O atributo `aria-busy="true"` já está embutido; não adicione atributos de acessibilidade manualmente.
+
+---
+
+## Select
+**Caminho:** `src/components/ui/Select/Select.tsx`
+**Import:** `import { Select } from '@/components/ui'`
+
+Dropdown customizado (sem `<select>` nativo) com lista de opções estilizada, animação de chevron, estado de foco, erro e desabilitado. Integra com React Hook Form via `Controller`. Substitui todo `<select>` nativo na aplicação.
+
+### Props
+| Prop | Tipo | Default | Descrição |
+|------|------|---------|-----------|
+| `options` | `SelectOption[]` | `—` | Array de opções; cada item tem `label: string` e `value: string` |
+| `value` | `string` | `—` | Valor atualmente selecionado (componente controlado) |
+| `onChange` | `(value: string) => void` | `—` | Callback chamado ao selecionar uma opção; recebe o `value` da opção, não um evento |
+| `onBlur` | `() => void` | `—` | Callback chamado ao fechar o dropdown (para integração com RHF) |
+| `placeholder` | `string` | `'Selecione...'` | Texto exibido quando nenhuma opção está selecionada |
+| `label` | `string` | `—` | Rótulo exibido acima do campo |
+| `helperText` | `string` | `—` | Texto auxiliar exibido abaixo do campo |
+| `errorMessage` | `string` | `—` | Mensagem de erro; substitui `helperText` quando presente |
+| `disabled` | `boolean` | `—` | Desabilita o campo e aplica opacidade reduzida |
+| `name` | `string` | `—` | Atributo `name` semântico para o botão trigger |
+
+### Uso
+```tsx
+{/* Campo avulso com estado local */}
+<Select
+  label="Categoria"
+  placeholder="Selecione..."
+  options={[
+    { label: 'Garçom / Garçonete', value: 'garcom' },
+    { label: 'Bartender', value: 'bartender' },
+  ]}
+  value={categoria}
+  onChange={setCategoria}
+/>
+
+{/* Integrado ao React Hook Form via Controller */}
+<Controller
+  name="categoria"
+  control={control}
+  render={({ field }) => (
+    <Select
+      label="Categoria Profissional"
+      placeholder="Selecione a categoria..."
+      options={CATEGORIES.map((c) => ({ label: c, value: c }))}
+      value={field.value}
+      onChange={field.onChange}
+      onBlur={field.onBlur}
+      errorMessage={errors.categoria?.message}
+    />
+  )}
+/>
+```
+
+### Regras de uso
+- **Nunca** usar `<select>` nativo — sempre `<Select />` do barrel.
+- O `onChange` recebe o `value` da opção diretamente (`string`), não um `React.ChangeEvent`. Em formulários, use `Controller` do React Hook Form; nunca `register()` diretamente.
+- `options` deve ser extraído para uma constante fora do JSX — nunca definir o array inline na prop.
+- Sempre forneça `placeholder` para indicar o estado vazio; omitir deixa o campo parecendo já preenchido.
+
+---
+
+## Sidebar
+**Caminho:** `src/components/ui/Sidebar/Sidebar.tsx`
+**Import:** `import { Sidebar } from '@/components/ui'`
+
+Navegação lateral fixa para desktop (≥ 1024px), com cabeçalho de marca, itens de navegação com indicador de aba ativa e rodapé opcional para ações contextuais. Oculto automaticamente em mobile.
+
+### Props
+| Prop | Tipo | Default | Descrição |
+|------|------|---------|-----------|
+| `items` | `SidebarItem[]` | `—` | Array de itens de navegação (`value`, `label`, `icon`, `badge?`) |
+| `activeItem` | `string` | `—` | `value` do item atualmente ativo |
+| `onChange` | `(value: string) => void` | `—` | Callback chamado ao clicar em um item |
+| `role` | `'empresa' \| 'freelancer'` | `—` | Quando fornecido, exibe `boneco + "QueroExtra \| Empresa"` ou `"... \| Freelancer"` no cabeçalho |
+| `header` | `React.ReactNode` | `—` | Substitui completamente o cabeçalho padrão quando fornecido |
+| `footer` | `React.ReactNode` | `—` | Conteúdo renderizado no rodapé da sidebar (ex.: botão "Nova Vaga") |
+
+### Uso
+```tsx
+import type { SidebarItem } from '@/components/ui'
+
+const items: SidebarItem[] = [
+  { value: '/empresa/gestao', label: 'Gestão', icon: <LayoutGrid size={20} /> },
+  { value: '/empresa/explorar', label: 'Explorar', icon: <Compass size={20} /> },
+]
+
+<Sidebar
+  items={items}
+  activeItem={location.pathname}
+  onChange={(path) => navigate(path)}
+  role="empresa"
+  footer={<Button variant="primary" onClick={openForm}>Nova Vaga</Button>}
+/>
+```
+
+### Regras de uso
+- Renderize `<Sidebar />` apenas no layout raiz de cada área (`ContratanteHome`, `ExtrasHome`, `AdminLayout`) — nunca nas páginas filhas.
+- Use `role` para o cabeçalho padrão de marca; use `header` apenas para casos excepcionais que fogem ao padrão.
+- O componente já inclui `hidden lg:flex` internamente — não adicione classes de visibilidade por fora.
+- `SidebarItem.badge` exibe um contador de notificações vermelho no item — use apenas para contagens reais.

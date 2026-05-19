@@ -36,7 +36,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
   // 4. Role errado → redireciona para a home correta
   if (allowedRole && tipo && tipo !== allowedRole) {
     const homeMap = {
-      freelancer: '/app',
+      freelancer: '/extras',
       empresa: '/empresa',
       admin: '/admin',
     }

@@ -51,6 +51,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [freelancer, setFreelancer] = useState<Freelancer | null>(null)
   const [loading, setLoading] = useState(true)
   const initializedRef = useRef(false)
+  const loadedUserIdRef = useRef<string | null>(null)
 
   const fetchProfile = useCallback(async (userId: string) => {
     console.log('[AuthContext] fetchProfile: iniciando busca...', userId)
@@ -158,6 +159,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (session?.user) {
           try {
             await loadUserData(session.user.id)
+            loadedUserIdRef.current = session.user.id
           } finally {
             initializedRef.current = true
             setLoading(false)
@@ -181,12 +183,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // TOKEN_REFRESHED não requer re-fetch do perfil.
       if (event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') return
 
-      setSession(session)
-      setUser(session?.user ?? null)
-
       if (session?.user) {
-        loadUserData(session.user.id)
+        setSession(session)
+        setUser(session.user)
+        if (event === 'SIGNED_IN' && loadedUserIdRef.current !== session.user.id) {
+          loadedUserIdRef.current = session.user.id
+          loadUserData(session.user.id)
+        }
       } else {
+        loadedUserIdRef.current = null
+        setSession(null)
+        setUser(null)
         setProfile(null)
         setCompany(null)
         setFreelancer(null)

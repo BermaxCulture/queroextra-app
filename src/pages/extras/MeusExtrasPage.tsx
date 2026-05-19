@@ -7,7 +7,10 @@ import {
   Button,
   EmptyState,
   useToast,
+  SkeletonCard,
+  Tabs,
 } from '@/components/ui'
+import type { TabItem } from '@/components/ui'
 import {
   Briefcase,
   MapPin,
@@ -186,7 +189,7 @@ export default function MeusExtrasPage() {
     }
   }
 
-  const tabs: { label: string; value: TabStatus }[] = [
+  const tabs: TabItem[] = [
     { label: 'Pendentes', value: 'pendente' },
     { label: 'Confirmados', value: 'aprovado' },
     { label: 'Em andamento', value: 'em_andamento' },
@@ -206,33 +209,13 @@ export default function MeusExtrasPage() {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 md:px-8 mt-6 space-y-6">
-        {/* Abas horizontais deslizáveis */}
-        <div className="flex border-b border-qe-gray-200 overflow-x-auto scrollbar-none gap-2 py-1">
-          {tabs.map((tab) => (
-            <button
-              key={tab.value}
-              onClick={() => setActiveTab(tab.value)}
-              className={[
-                'px-4 py-2 text-[14px] font-semibold whitespace-nowrap border-b-2 transition-all cursor-pointer',
-                activeTab === tab.value
-                  ? 'border-qe-yellow text-qe-gray-900'
-                  : 'border-transparent text-qe-gray-400 hover:text-qe-gray-600',
-              ].join(' ')}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        <Tabs tabs={tabs} activeTab={activeTab} onChange={(v) => setActiveTab(v as TabStatus)} />
 
         {/* Listagem */}
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
-            {[1, 2].map((i) => (
-              <div
-                key={i}
-                className="h-[140px] bg-white border border-qe-gray-200 rounded-qe-md animate-pulse"
-              ></div>
-            ))}
+            <SkeletonCard />
+            <SkeletonCard />
           </div>
         ) : applications.length === 0 ? (
           <div className="pt-8">
@@ -242,7 +225,7 @@ export default function MeusExtrasPage() {
               description={getEmptyStateMessage(activeTab)}
               action={
                 activeTab === 'pendente' && (
-                  <Button variant="primary" onClick={() => navigate('/app/explorar')}>
+                  <Button variant="primary" onClick={() => navigate('/extras/explorar')}>
                     Explorar Extras
                   </Button>
                 )
@@ -304,7 +287,7 @@ export default function MeusExtrasPage() {
                     variant="primary"
                     size="sm"
                     className="flex items-center gap-1 font-semibold text-[13px] px-3.5"
-                    onClick={() => navigate(`/app/vaga/${app.job_id}`)}
+                    onClick={() => navigate(`/extras/vaga/${app.job_id}`)}
                   >
                     Ver Detalhes
                     <ChevronRight size={14} />

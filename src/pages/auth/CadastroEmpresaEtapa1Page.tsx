@@ -1,11 +1,11 @@
 import { useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useForm } from 'react-hook-form'
+import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Mail, Lock, Building2, ArrowRight, Eye, EyeOff, CreditCard, Camera } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { Button, Input, useToast, Avatar } from '@/components/ui'
+import { Button, Input, Select, useToast, Avatar } from '@/components/ui'
 import { AuthPageShell } from '@/components/auth/AuthPageShell'
 import { EMPRESA_AREAS } from '@/constants/empresaAreas'
 import {
@@ -54,6 +54,7 @@ export default function CadastroEmpresaEtapa1Page() {
     handleSubmit,
     setValue,
     watch,
+    control,
     formState: { errors },
   } = useForm<EmpresaEtapa1Form>({
     resolver: zodResolver(empresaEtapa1Schema),
@@ -202,31 +203,21 @@ export default function CadastroEmpresaEtapa1Page() {
           errorMessage={errors.email?.message}
         />
 
-        <div className="flex flex-col gap-1.5 w-full">
-          <label htmlFor="area" className="text-[13px] font-semibold text-qe-gray-700">
-            Área de atuação
-          </label>
-          <select
-            id="area"
-            className="w-full h-[50px] bg-qe-white border-[1.5px] border-qe-gray-200 rounded-qe-sm font-sans text-[16px] text-qe-gray-900 px-3.5 outline-none focus:border-qe-yellow focus:shadow-[0_0_0_3px_rgba(245,192,0,0.15)]"
-            {...register('area')}
-            defaultValue=""
-          >
-            <option value="" disabled>
-              Selecione uma área
-            </option>
-            {EMPRESA_AREAS.map((area) => (
-              <option key={area} value={area}>
-                {area}
-              </option>
-            ))}
-          </select>
-          {errors.area?.message && (
-            <span className="text-[12px] text-qe-error" role="alert">
-              {errors.area.message}
-            </span>
+        <Controller
+          name="area"
+          control={control}
+          render={({ field }) => (
+            <Select
+              label="Área de atuação"
+              placeholder="Selecione uma área"
+              options={EMPRESA_AREAS.map((a) => ({ label: a, value: a }))}
+              value={field.value}
+              onChange={field.onChange}
+              onBlur={field.onBlur}
+              errorMessage={errors.area?.message}
+            />
           )}
-        </div>
+        />
 
         <div className="relative">
           <Input

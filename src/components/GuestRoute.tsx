@@ -18,7 +18,7 @@ export const GuestRoute: React.FC<GuestRouteProps> = ({ children }) => {
     const tipo = user.user_metadata?.tipo || profile?.tipo
     if (tipo) {
       const homeMap = {
-        freelancer: '/app',
+        freelancer: '/extras',
         empresa: '/empresa',
         admin: '/admin',
       }

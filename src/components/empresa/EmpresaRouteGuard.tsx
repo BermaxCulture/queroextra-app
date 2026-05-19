@@ -17,7 +17,10 @@ export function EmpresaRouteGuard({
   const { user, profile, company, loading } = useAuth()
   const location = useLocation()
 
-  if (loading) {
+  const tipo = profile?.tipo ?? user?.user_metadata?.tipo
+
+  // Aguarda dados transientes: AuthContext inicializando, profile ou company ainda carregando
+  if (loading || (user && !profile) || (tipo === 'empresa' && !company)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-qe-off-white">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-qe-yellow" />
@@ -25,7 +28,7 @@ export function EmpresaRouteGuard({
     )
   }
 
-  if (!user || profile?.tipo !== 'empresa') {
+  if (!user || tipo !== 'empresa') {
     return <Navigate to="/login" state={{ from: location }} replace />
   }
 
@@ -36,10 +39,11 @@ export function EmpresaRouteGuard({
   }
 
   if (!allowPending) {
-    if (!hasDocs) {
+    if (company?.status === 'aprovado') {
+      // aprovada: acesso liberado independente de hasDocs
+    } else if (!hasDocs) {
       return <Navigate to="/cadastro/empresa/documentos" replace />
-    }
-    if (company?.status !== 'aprovado') {
+    } else {
       return <Navigate to="/empresa/aguardando" replace />
     }
   }

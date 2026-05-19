@@ -49,3 +49,6 @@ export { SkeletonCard } from './SkeletonCard'
 
 export { Sidebar } from './Sidebar'
 export type { SidebarProps, SidebarItem } from './Sidebar'
+
+export { Select } from './Select'
+export type { SelectProps, SelectOption } from './Select'

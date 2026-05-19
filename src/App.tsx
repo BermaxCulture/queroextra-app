@@ -92,7 +92,7 @@ function App() {
 
             {/* Área dos Extras (Freelancer) */}
             <Route 
-              path="/app/*" 
+              path="/extras/*"
               element={
                 <ProtectedRoute allowedRole="freelancer">
                   <ExtrasHome />
