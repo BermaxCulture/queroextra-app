@@ -1,6 +1,6 @@
 export interface TopBarProps {
   variant?: 'main' | 'inner'
-  title?: string
+  title?: React.ReactNode
   onBack?: () => void
   actions?: React.ReactNode
   notificationCount?: number

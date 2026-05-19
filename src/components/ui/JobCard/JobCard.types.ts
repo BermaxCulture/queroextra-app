@@ -1,6 +1,7 @@
 export interface JobCardProps {
   category: string
   title: string
+  companyName?: string
   location: string
   distance?: string
   date: string
@@ -11,3 +12,4 @@ export interface JobCardProps {
   tags?: string[]
   onApply?: () => void
 }
+
