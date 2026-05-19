@@ -1,26 +1,112 @@
-import { useAuth } from '@/contexts/AuthContext'
-import { Button } from '@/components/ui'
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
+import {
+  BottomNav,
+  TopBar,
+  Button,
+} from '@/components/ui'
+import { Wallet } from 'lucide-react'
+import VagasExplorarPage from './VagasExplorarPage'
+import VagaDetalhesPage from './VagaDetalhesPage'
+import MeusExtrasPage from './MeusExtrasPage'
+import PerfilPage from './PerfilPage'
 
+// ==========================================
+// ABA: CARTEIRA (MOCK PREMIUM)
+// ==========================================
+function CarteiraPage() {
+  return (
+    <div>
+      <TopBar variant="main" title="Minha Carteira" />
+      <main className="px-4 py-6 max-w-md mx-auto space-y-6">
+        <h1 className="text-h1 font-bold text-qe-gray-900 mb-2">Carteira</h1>
+
+        {/* Card de Saldo */}
+        <div className="bg-qe-navy text-white rounded-qe-lg p-6 space-y-4">
+          <div>
+            <div className="text-[11px] text-white/50 uppercase tracking-[0.5px] font-bold">Saldo Disponível</div>
+            <div className="text-[32px] font-bold mt-1">R$ 0,00</div>
+          </div>
+          <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/10">
+            <div>
+              <div className="text-[11px] text-white/40 uppercase tracking-[0.5px]">A Receber</div>
+              <div className="text-[16px] font-bold mt-0.5">R$ 0,00</div>
+            </div>
+            <div>
+              <div className="text-[11px] text-white/40 uppercase tracking-[0.5px]">Total Pago</div>
+              <div className="text-[16px] font-bold mt-0.5">R$ 0,00</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Integração de Pagamento */}
+        <div className="bg-white rounded-qe-md border border-qe-gray-200 p-5 space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-qe-yellow-subtle rounded-full flex items-center justify-center text-qe-yellow-text">
+              <Wallet size={20} />
+            </div>
+            <div>
+              <h3 className="text-[15px] font-bold text-qe-gray-950">Recebimento Instantâneo</h3>
+              <p className="text-[12px] text-qe-gray-400 mt-0.5">Configure sua conta para receber em até 24h.</p>
+            </div>
+          </div>
+          <Button variant="secondary" className="w-full">
+            Configurar Conta de Repasse
+          </Button>
+        </div>
+      </main>
+    </div>
+  )
+}
+
+
+// ==========================================
+// COMPONENTE PRINCIPAL: EXTRAS HOME
+// ==========================================
 export default function ExtrasHome() {
-  const { profile, signOut } = useAuth()
+  const location = useLocation()
+  const navigate = useNavigate()
+
+  // Determinar tab ativa com base na rota
+  const getActiveTab = () => {
+    const path = location.pathname
+    if (path.includes('/app/explorar')) return 'explorar'
+    if (path.includes('/app/extras')) return 'extras'
+    if (path.includes('/app/carteira')) return 'carteira'
+    if (path.includes('/app/perfil')) return 'perfil'
+    return 'explorar'
+  }
+
+  const handleTabChange = (tab: string) => {
+    navigate(`/app/${tab}`)
+  }
+
+  const showBottomNav = !location.pathname.includes('/app/vaga/')
 
   return (
-    <div className="min-h-screen bg-qe-off-white p-8">
-      <div className="max-w-4xl mx-auto">
-        <header className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-display font-bold text-qe-black">Painel do Extra</h1>
-            <p className="text-body text-qe-gray-500">Bem-vindo, {profile?.nome}</p>
-          </div>
-          <Button variant="ghost" onClick={signOut}>Sair</Button>
-        </header>
-        
-        <div className="bg-white rounded-qe-lg p-12 shadow-qe-sm border border-qe-gray-200 text-center">
-          <h2 className="text-h2 font-bold mb-4">Área do Contratado (Extra)</h2>
-          <p className="text-body text-qe-gray-500 mb-8">Aqui você poderá encontrar oportunidades e gerenciar seus ganhos.</p>
-          <Button variant="primary">Ver Vagas Disponíveis</Button>
-        </div>
+    <div className="min-h-screen bg-qe-bg-page flex flex-col justify-between">
+      {/* Rotas Internas */}
+      <div className="flex-1">
+        <Routes>
+          <Route path="/" element={<Navigate to="explorar" replace />} />
+          <Route path="explorar" element={<VagasExplorarPage />} />
+          <Route path="vaga/:id" element={<VagaDetalhesPage />} />
+          <Route path="extras" element={<MeusExtrasPage />} />
+          <Route path="carteira" element={<CarteiraPage />} />
+          <Route path="perfil" element={<PerfilPage />} />
+          <Route path="*" element={<Navigate to="explorar" replace />} />
+        </Routes>
       </div>
+
+      {/* Bottom Nav Fixo */}
+      {showBottomNav && (
+        <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto z-10">
+          <BottomNav
+            variant="freelancer"
+            activeTab={getActiveTab()}
+            onChange={handleTabChange}
+          />
+        </div>
+      )}
     </div>
   )
 }

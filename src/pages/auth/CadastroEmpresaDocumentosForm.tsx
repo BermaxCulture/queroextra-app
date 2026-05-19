@@ -97,9 +97,9 @@ export default function CadastroEmpresaDocumentosForm() {
         'success'
       )
       navigate('/empresa/aguardando', { replace: true })
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : 'Erro ao enviar documentos.'
+    } catch (error: any) {
+      console.error('Erro detalhado no envio de documentos:', error)
+      const message = error?.message || 'Erro ao enviar documentos.'
       showToast(message, 'error')
     } finally {
       setLoading(false)

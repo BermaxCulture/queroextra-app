@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'r
 import { ToastProvider } from '@/components/ui'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
+import { GuestRoute } from '@/components/GuestRoute'
 
 // Páginas Públicas
 import LandingPage from '@/pages/LandingPage'
@@ -42,16 +43,23 @@ function App() {
           <ScrollToTop />
           <Routes>
             {/* --- ROTAS PÚBLICAS --- */}
-            <Route path="/" element={<LandingPage />} />
-            <Route path="/para-freelancers" element={<ParaFreelancers />} />
-            <Route path="/para-empresas" element={<ParaEmpresas />} />
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/cadastro" element={<CadastroPage />} />
-            <Route path="/cadastro/empresa" element={<CadastroEmpresaEtapa1Page />} />
+            <Route path="/" element={<GuestRoute><LandingPage /></GuestRoute>} />
+            <Route path="/para-freelancers" element={<GuestRoute><ParaFreelancers /></GuestRoute>} />
+            <Route path="/para-empresas" element={<GuestRoute><ParaEmpresas /></GuestRoute>} />
+            
+            {/* Login e Cadastro protegidos para convidados apenas */}
+            <Route path="/login" element={<GuestRoute><LoginPage /></GuestRoute>} />
+            <Route path="/cadastro" element={<GuestRoute><CadastroPage /></GuestRoute>} />
+            <Route path="/cadastro/empresa" element={<GuestRoute><CadastroEmpresaEtapa1Page /></GuestRoute>} />
             <Route
               path="/cadastro/empresa/documentos"
-              element={<CadastroEmpresaEtapa2Page />}
+              element={
+                <GuestRoute>
+                  <CadastroEmpresaEtapa2Page />
+                </GuestRoute>
+              }
             />
+            
             <Route path="/styles" element={<StylesPage />} />
             <Route path="/termos" element={<TermosDeUso />} />
             <Route path="/privacidade" element={<Privacidade />} />

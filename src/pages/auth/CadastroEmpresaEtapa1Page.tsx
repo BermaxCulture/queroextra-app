@@ -124,9 +124,16 @@ export default function CadastroEmpresaEtapa1Page() {
       navigate('/login', {
         state: { message: 'Confirme seu e-mail e faça login para enviar os documentos.' },
       })
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : 'Erro ao cadastrar empresa.'
+    } catch (error: any) {
+      console.error('Erro detalhado no cadastro de empresa (Etapa 1):', error)
+      let message = 'Erro ao cadastrar empresa.'
+      if (error?.message) {
+        if (error.message === 'User already registered') {
+          message = 'Este e-mail já está cadastrado.'
+        } else {
+          message = `Erro ao cadastrar empresa: ${error.message}`
+        }
+      }
       showToast(message, 'error')
     } finally {
       setLoading(false)
