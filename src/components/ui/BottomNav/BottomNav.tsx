@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Compass, Briefcase, Wallet, User, LayoutGrid } from 'lucide-react'
+import { Compass, Briefcase, Wallet, User, LayoutGrid, Users } from 'lucide-react'
 import type { BottomNavProps, BottomNavItem } from './BottomNav.types'
 
 const freelancerItems: BottomNavItem[] = [
@@ -10,10 +10,10 @@ const freelancerItems: BottomNavItem[] = [
 ]
 
 const empresaItems: BottomNavItem[] = [
-  { value: 'explorar', label: 'Explorar', icon: <Compass size={22} /> },
-  { value: 'gestao', label: 'Gestão', icon: <LayoutGrid size={22} /> },
-  { value: 'carteira', label: 'Carteira', icon: <Wallet size={22} /> },
-  { value: 'perfil', label: 'Perfil', icon: <User size={22} /> },
+  { value: 'gestao',      label: 'Gestão',      icon: <LayoutGrid size={22} /> },
+  { value: 'candidatos',  label: 'Candidatos',  icon: <Users size={22} /> },
+  { value: 'carteira',    label: 'Carteira',    icon: <Wallet size={22} /> },
+  { value: 'perfil',      label: 'Perfil',      icon: <User size={22} /> },
 ]
 
 export const BottomNav: React.FC<BottomNavProps> = ({

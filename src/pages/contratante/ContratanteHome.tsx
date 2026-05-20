@@ -2,22 +2,28 @@ import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-
 import { useAuth } from '@/contexts/AuthContext'
 import { BottomNav, TopBar, Button, Sidebar } from '@/components/ui'
 import type { SidebarItem } from '@/components/ui'
-import { Plus, Compass, LayoutGrid, Wallet, User, Briefcase } from 'lucide-react'
+import { Plus, LayoutGrid, Wallet, User, Briefcase, Users } from 'lucide-react'
 import EmpresaDashboard from '../empresa/EmpresaDashboard'
 import NovaVaga from '../empresa/NovaVaga'
 import Candidatos from '../empresa/Candidatos'
 import EmpresaCarteira from '../empresa/EmpresaCarteira'
 import EmpresaPerfil from '../empresa/EmpresaPerfil'
-import EmpresaExplorar from '../empresa/EmpresaExplorar'
 import VagasLista from '../empresa/VagasLista'
 import VagaDetalhe from '../empresa/VagaDetalhe'
+import EmpresaPerfilPage from '../extras/EmpresaPerfilPage'
+
+function EmpresaPreviewWrapper() {
+  const { company } = useAuth()
+  if (!company?.id) return null
+  return <EmpresaPerfilPage hideTopBar companyIdOverride={company.id} />
+}
 
 const empresaItems: SidebarItem[] = [
-  { value: '/empresa/gestao',   label: 'Gestão',    icon: <LayoutGrid size={20} /> },
-  { value: '/empresa/vagas',    label: 'Vagas',     icon: <Briefcase size={20} /> },
-  { value: '/empresa/explorar', label: 'Explorar',  icon: <Compass size={20} /> },
-  { value: '/empresa/carteira', label: 'Carteira',  icon: <Wallet size={20} /> },
-  { value: '/empresa/perfil',   label: 'Perfil',    icon: <User size={20} /> },
+  { value: '/empresa/gestao',      label: 'Gestão',      icon: <LayoutGrid size={20} /> },
+  { value: '/empresa/vagas',       label: 'Vagas',       icon: <Briefcase size={20} /> },
+  { value: '/empresa/candidatos',  label: 'Candidatos',  icon: <Users size={20} /> },
+  { value: '/empresa/carteira',    label: 'Carteira',    icon: <Wallet size={20} /> },
+  { value: '/empresa/perfil',      label: 'Perfil',      icon: <User size={20} /> },
 ]
 
 export default function ContratanteHome() {
@@ -28,27 +34,26 @@ export default function ContratanteHome() {
 
   const getActiveTab = () => {
     const path = location.pathname
-    if (path.includes('/empresa/explorar')) return 'explorar'
+    if (path.includes('/empresa/candidatos')) return 'candidatos'
     if (path.includes('/empresa/carteira')) return 'carteira'
     if (path.includes('/empresa/perfil')) return 'perfil'
-    if (path.includes('/empresa/vagas')) return 'gestao'
     return 'gestao'
   }
 
   const getMobileTitle = () => {
     const path = location.pathname
-    if (path.includes('/empresa/explorar')) return 'Explorar Extras'
+    if (path.includes('/empresa/candidatos')) return 'Candidatos'
     if (path.includes('/empresa/carteira')) return 'Minha Carteira'
+    if (path.includes('/empresa/perfil-publico')) return 'Prévia do Perfil'
     if (path.includes('/empresa/perfil')) return 'Meu Perfil'
     if (path.includes('/empresa/nova-vaga')) return 'Publicar Vaga'
-    if (path.includes('/empresa/candidatos')) return 'Candidatos'
     if (/\/empresa\/vagas\/[^/]+/.test(path)) return 'Detalhe da Vaga'
     if (path === '/empresa/vagas') return 'Minhas Vagas'
     return 'Painel de Gestão'
   }
 
   const handleTabChange = (value: string) => {
-    if (value === 'explorar') navigate('/empresa/explorar')
+    if (value === 'candidatos') navigate('/empresa/candidatos')
     else if (value === 'carteira') navigate('/empresa/carteira')
     else if (value === 'perfil') navigate('/empresa/perfil')
     else navigate('/empresa/gestao')
@@ -85,6 +90,7 @@ export default function ContratanteHome() {
   const isInnerPage =
     location.pathname.includes('/nova-vaga') ||
     location.pathname.includes('/candidatos') ||
+    location.pathname.includes('/perfil-publico') ||
     /\/empresa\/vagas\/.+/.test(location.pathname)
 
   const sidebarFooter = (
@@ -128,16 +134,20 @@ export default function ContratanteHome() {
         </div>
 
         {/* CONTEÚDO PRINCIPAL */}
-        <main className="flex-1 px-4 md:px-8 py-6 pb-24 lg:pb-8">
+        <main className={
+          location.pathname.includes('/perfil-publico')
+            ? 'flex-1 pb-24 lg:pb-8'
+            : 'flex-1 px-4 md:px-8 py-6 pb-24 lg:pb-8'
+        }>
           <Routes>
             <Route path="gestao" element={<EmpresaDashboard />} />
             <Route path="nova-vaga" element={<NovaVaga />} />
             <Route path="candidatos" element={<Candidatos />} />
             <Route path="vagas" element={<VagasLista />} />
             <Route path="vagas/:id" element={<VagaDetalhe />} />
-            <Route path="explorar" element={<EmpresaExplorar />} />
             <Route path="carteira" element={<EmpresaCarteira />} />
             <Route path="perfil" element={<EmpresaPerfil />} />
+            <Route path="perfil-publico" element={<EmpresaPreviewWrapper />} />
             <Route path="" element={<Navigate to="gestao" replace />} />
           </Routes>
         </main>

@@ -9,12 +9,10 @@ import {
   Input,
   Select,
   Badge,
-  Avatar,
   useToast,
   EmptyState,
   SkeletonCard,
   Tabs,
-  ResponsiveSheet,
 } from '@/components/ui'
 import type { TabItem } from '@/components/ui'
 import {
@@ -25,14 +23,9 @@ import {
   FileText,
   Gift,
   Zap,
-  AlertCircle,
-  Check,
-  X,
-  Phone,
-  MessageCircle,
-  Users,
 } from 'lucide-react'
 import { JOB_CATEGORIES, BRAZIL_STATES, STATUS_LABELS } from './jobConstants'
+import { CandidatosTab } from '@/components/empresa/CandidatosTab'
 
 interface Job {
   id: string
@@ -52,22 +45,6 @@ interface Job {
   created_at: string
 }
 
-interface Application {
-  id: string
-  status: 'pendente' | 'aprovado' | 'rejeitado'
-  created_at: string
-  freelancers: {
-    id: string
-    profiles: {
-      id: string
-      nome: string
-      avatar_url: string | null
-      celular: string | null
-      email: string | null
-    }
-  } | null
-}
-
 const editJobSchema = z.object({
   titulo: z.string().min(5).max(80),
   categoria: z.string().min(1, 'Selecione uma categoria'),
@@ -85,17 +62,10 @@ const editJobSchema = z.object({
 type EditJobFormData = z.infer<typeof editJobSchema>
 
 type MainTab = 'detalhes' | 'candidatos'
-type CandidateTab = 'pendente' | 'aprovado' | 'rejeitado'
 
 const MAIN_TABS: TabItem[] = [
   { label: 'Detalhes', value: 'detalhes' },
   { label: 'Candidatos', value: 'candidatos' },
-]
-
-const CANDIDATE_TABS: TabItem[] = [
-  { label: 'Pendentes', value: 'pendente' },
-  { label: 'Aprovados', value: 'aprovado' },
-  { label: 'Recusados', value: 'rejeitado' },
 ]
 
 function formatDateTime(iso: string | null) {
@@ -146,16 +116,6 @@ export default function VagaDetalhe() {
 
   const initialTab = searchParams.get('tab') === 'candidatos' ? 'candidatos' : 'detalhes'
   const [activeMainTab, setActiveMainTab] = React.useState<MainTab>(initialTab as MainTab)
-
-  const [activeCandidateTab, setActiveCandidateTab] = React.useState<CandidateTab>('pendente')
-  const [applications, setApplications] = React.useState<Application[]>([])
-  const [loadingApps, setLoadingApps] = React.useState(false)
-
-  const [isConfirmOpen, setIsConfirmOpen] = React.useState(false)
-  const [confirmAppId, setConfirmAppId] = React.useState<string | null>(null)
-  const [confirmFreelancerName, setConfirmFreelancerName] = React.useState('')
-  const [confirmFreelancerPhone, setConfirmFreelancerPhone] = React.useState<string | null>(null)
-  const [isActionLoading, setIsActionLoading] = React.useState(false)
 
   const {
     register,
@@ -224,33 +184,6 @@ export default function VagaDetalhe() {
     loadJob()
   }, [loadJob])
 
-  const loadApplications = React.useCallback(async () => {
-    if (!jobId) return
-    try {
-      setLoadingApps(true)
-      const { data, error } = await supabase
-        .from('applications')
-        .select('id, job_id, status, created_at, freelancers(id, profiles(id, nome, avatar_url, celular, email))')
-        .eq('job_id', jobId)
-        .eq('status', activeCandidateTab)
-        .order('created_at', { ascending: false })
-
-      if (error) throw error
-      setApplications((data as unknown as Application[]) || [])
-    } catch (err: any) {
-      console.error('[VagaDetalhe] Erro ao carregar candidatos:', err)
-      showToast('Não foi possível carregar os candidatos.', 'error')
-    } finally {
-      setLoadingApps(false)
-    }
-  }, [jobId, activeCandidateTab, showToast])
-
-  React.useEffect(() => {
-    if (activeMainTab === 'candidatos') {
-      loadApplications()
-    }
-  }, [activeMainTab, loadApplications])
-
   const toggleTag = (tag: string) => {
     setSelectedTags((prev) =>
       prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
@@ -289,53 +222,6 @@ export default function VagaDetalhe() {
       showToast('Não foi possível salvar as alterações.', 'error')
     } finally {
       setIsSubmitting(false)
-    }
-  }
-
-  const triggerApprove = (appId: string, name: string, phone: string | null) => {
-    setConfirmAppId(appId)
-    setConfirmFreelancerName(name)
-    setConfirmFreelancerPhone(phone)
-    setIsConfirmOpen(true)
-  }
-
-  const handleApprove = async () => {
-    if (!confirmAppId) return
-    try {
-      setIsActionLoading(true)
-      const { error } = await supabase
-        .from('applications')
-        .update({ status: 'aprovado' })
-        .eq('id', confirmAppId)
-
-      if (error) throw error
-
-      showToast(`${confirmFreelancerName} aprovado com sucesso!`, 'success')
-      setIsConfirmOpen(false)
-      loadApplications()
-    } catch (err: any) {
-      console.error('Erro ao aprovar:', err)
-      showToast('Erro ao aprovar candidato.', 'error')
-    } finally {
-      setIsActionLoading(false)
-    }
-  }
-
-  const handleReject = async (appId: string, name: string) => {
-    if (!window.confirm(`Tem certeza que deseja recusar o candidato ${name}?`)) return
-    try {
-      const { error } = await supabase
-        .from('applications')
-        .update({ status: 'rejeitado' })
-        .eq('id', appId)
-
-      if (error) throw error
-
-      showToast(`${name} recusado.`, 'info')
-      loadApplications()
-    } catch (err: any) {
-      console.error('Erro ao rejeitar:', err)
-      showToast('Erro ao recusar candidato.', 'error')
     }
   }
 
@@ -674,173 +560,8 @@ export default function VagaDetalhe() {
 
       {/* Aba Candidatos */}
       {activeMainTab === 'candidatos' && (
-        <div className="space-y-4">
-          <Tabs
-            tabs={CANDIDATE_TABS}
-            activeTab={activeCandidateTab}
-            onChange={(v) => setActiveCandidateTab(v as CandidateTab)}
-          />
-
-          {loadingApps ? (
-            <div className="space-y-4">
-              <SkeletonCard />
-              <SkeletonCard />
-            </div>
-          ) : applications.length === 0 ? (
-            <EmptyState
-              icon={<Users size={48} className="text-qe-gray-300" />}
-              title="Nenhum candidato"
-              description={`Nenhum candidato com status "${activeCandidateTab}" para esta vaga.`}
-            />
-          ) : (
-            <div className="space-y-4">
-              {applications.map((app) => {
-                const freelancer = app.freelancers?.profiles
-                if (!freelancer) return null
-
-                return (
-                  <div
-                    key={app.id}
-                    className="bg-white rounded-qe-md border border-qe-gray-200 p-5 flex flex-col md:flex-row justify-between md:items-center gap-4 hover:border-qe-gray-300 transition-colors shadow-qe-sm"
-                  >
-                    <div className="flex items-start gap-3.5 min-w-0 flex-1">
-                      <Avatar
-                        src={freelancer.avatar_url || undefined}
-                        name={freelancer.nome}
-                        size="md"
-                        verified
-                      />
-                      <div className="min-w-0">
-                        <h3 className="text-[16px] font-bold text-qe-gray-900 truncate">
-                          {freelancer.nome}
-                        </h3>
-                        <p className="text-[12px] text-qe-gray-400 font-medium">
-                          Candidatou-se em: {new Date(app.created_at).toLocaleDateString('pt-BR')}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 md:self-center shrink-0">
-                      {activeCandidateTab === 'pendente' && (
-                        <>
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            className="bg-qe-error-bg text-qe-error border-none hover:bg-qe-error/20 flex items-center justify-center p-2 rounded-full w-10 h-10"
-                            onClick={() => handleReject(app.id, freelancer.nome)}
-                            title="Recusar"
-                          >
-                            <X size={18} />
-                          </Button>
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            className="bg-qe-success-bg text-qe-success border-none hover:bg-qe-success/20 flex items-center justify-center p-2 rounded-full w-10 h-10"
-                            onClick={() => triggerApprove(app.id, freelancer.nome, freelancer.celular)}
-                            title="Aprovar"
-                          >
-                            <Check size={18} />
-                          </Button>
-                        </>
-                      )}
-
-                      {activeCandidateTab === 'aprovado' && (
-                        <div className="flex flex-col md:items-end gap-2">
-                          <div className="flex items-center gap-1.5 text-qe-success font-bold text-[13px]">
-                            <Check size={16} /> Aprovado
-                          </div>
-                          {freelancer.celular && (
-                            <div className="flex flex-wrap gap-2">
-                              <a
-                                href={`tel:${freelancer.celular}`}
-                                className="flex items-center gap-1.5 px-3 py-1.5 bg-qe-gray-50 border border-qe-gray-200 text-qe-gray-700 text-[12px] font-bold rounded-qe-sm hover:border-qe-gray-300 transition-all cursor-pointer"
-                              >
-                                <Phone size={13} />
-                                Ligar
-                              </a>
-                              <a
-                                href={`https://wa.me/55${freelancer.celular.replace(/\D/g, '')}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#25D366] text-white text-[12px] font-bold rounded-qe-sm hover:bg-[#20ba59] transition-all cursor-pointer"
-                              >
-                                <MessageCircle size={13} />
-                                WhatsApp
-                              </a>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {activeCandidateTab === 'rejeitado' && (
-                        <span className="text-qe-error font-bold text-[13px] flex items-center gap-1.5 bg-qe-error-bg px-3 py-1.5 rounded-qe-xs border border-qe-error/20">
-                          <X size={14} /> Recusado
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
+        <CandidatosTab jobId={jobId} hideJobInfo tabParamName="candidatoStatus" />
       )}
-
-      {/* Modal de Confirmação de Aprovação */}
-      <ResponsiveSheet
-        open={isConfirmOpen}
-        onClose={() => setIsConfirmOpen(false)}
-        title="Confirmar Contratação"
-      >
-        <div className="p-6 space-y-6">
-          <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-qe-md p-4">
-            <AlertCircle className="text-amber-600 shrink-0 mt-0.5" size={20} />
-            <div className="text-[13px] text-amber-800 leading-relaxed">
-              <strong>Integração de pagamento em breve!</strong> No momento, a plataforma não
-              processa pagamentos via cartão/Pix. Você deve combinar o pagamento da diária
-              diretamente com o profissional após o fim do turno.
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <p className="text-[14px] text-qe-gray-700">
-              Deseja realmente confirmar a contratação de <strong>{confirmFreelancerName}</strong>?
-            </p>
-
-            <div className="bg-qe-gray-50 border border-qe-gray-100 rounded-qe-sm p-4 space-y-2">
-              <div className="text-[11px] font-bold text-qe-gray-400 uppercase tracking-[0.5px]">
-                Contato Liberado do Profissional
-              </div>
-              <div className="flex items-center gap-2 text-[14px] text-qe-gray-800 font-bold">
-                <Phone size={15} className="text-qe-yellow-text" />
-                <span>{confirmFreelancerPhone || 'Não informado'}</span>
-              </div>
-              <p className="text-[11px] text-qe-gray-400 mt-1">
-                Uma vez aprovado, o contato de celular do profissional será exibido no seu painel para contato via WhatsApp.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 justify-end pt-4 border-t border-qe-gray-100">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setIsConfirmOpen(false)}
-              disabled={isActionLoading}
-            >
-              Cancelar
-            </Button>
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={handleApprove}
-              loading={isActionLoading}
-            >
-              Confirmar Aprovação
-            </Button>
-          </div>
-        </div>
-      </ResponsiveSheet>
     </div>
   )
 }
