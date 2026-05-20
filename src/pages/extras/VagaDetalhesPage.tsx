@@ -15,7 +15,6 @@ import {
   CheckCircle2,
   AlertTriangle,
   ChevronRight,
-  Star,
 } from 'lucide-react'
 
 interface JobDetails {
@@ -292,7 +291,13 @@ export default function VagaDetalhesPage() {
           </section>
 
           {/* Card da empresa contratante */}
-          <section className="bg-white rounded-qe-md border border-qe-gray-200 p-4 flex items-center justify-between cursor-pointer hover:border-qe-gray-300 transition-colors shadow-qe-sm">
+          <section
+            role="button"
+            tabIndex={0}
+            onClick={() => job.companies?.id && navigate(`/extras/empresa/${job.companies.id}`)}
+            onKeyDown={(e) => e.key === 'Enter' && job.companies?.id && navigate(`/extras/empresa/${job.companies.id}`)}
+            className="bg-white rounded-qe-md border border-qe-gray-200 p-4 flex items-center justify-between cursor-pointer hover:border-qe-gray-300 transition-colors shadow-qe-sm"
+          >
             <div className="flex items-center gap-3">
               <Avatar
                 src={job.companies?.profiles.avatar_url || undefined}
@@ -304,11 +309,7 @@ export default function VagaDetalhesPage() {
                   {job.companies?.profiles.nome || 'Empresa parceira'}
                 </h3>
                 <div className="flex items-center gap-1.5 mt-1">
-                  <div className="flex items-center text-qe-yellow">
-                    <Star size={12} fill="currentColor" />
-                  </div>
-                  <span className="text-[12px] font-bold text-qe-gray-955">4.9</span>
-                  <span className="text-[12px] text-qe-gray-400">(38 avaliações)</span>
+                  <span className="text-[12px] text-qe-gray-400">Ver perfil da empresa</span>
                 </div>
               </div>
             </div>

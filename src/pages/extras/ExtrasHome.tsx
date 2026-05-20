@@ -11,6 +11,7 @@ import VagasExplorarPage from './VagasExplorarPage'
 import VagaDetalhesPage from './VagaDetalhesPage'
 import MeusExtrasPage from './MeusExtrasPage'
 import PerfilPage from './PerfilPage'
+import EmpresaPerfilPage from './EmpresaPerfilPage'
 
 const freelancerSidebarItems: SidebarItem[] = [
   { value: 'explorar', label: 'Explorar', icon: <Compass size={20} /> },
@@ -106,6 +107,7 @@ export default function ExtrasHome() {
           <Route path="/" element={<Navigate to="explorar" replace />} />
           <Route path="explorar" element={<VagasExplorarPage />} />
           <Route path="vaga/:id" element={<VagaDetalhesPage />} />
+          <Route path="empresa/:companyId" element={<EmpresaPerfilPage />} />
           <Route path="extras" element={<MeusExtrasPage />} />
           <Route path="carteira" element={<CarteiraPage />} />
           <Route path="perfil" element={<PerfilPage />} />
