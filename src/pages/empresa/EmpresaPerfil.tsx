@@ -142,7 +142,10 @@ export default function EmpresaPerfil() {
       const emailChanged =
         data.email.trim().toLowerCase() !== (profile?.email ?? '').toLowerCase()
       if (emailChanged) {
-        const { error: emailErr } = await supabase.auth.updateUser({ email: data.email.trim() })
+        const { error: emailErr } = await supabase.auth.updateUser(
+          { email: data.email.trim() },
+          { emailRedirectTo: `${window.location.origin}/email-confirmado` }
+        )
         if (emailErr) throw emailErr
       }
 
