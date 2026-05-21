@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -7,7 +7,6 @@ import { Mail, Lock, Building2, ArrowRight, Eye, EyeOff, CreditCard, Camera } fr
 import { supabase } from '@/lib/supabase'
 import { Button, Input, Select, useToast, Avatar } from '@/components/ui'
 import { AuthPageShell } from '@/components/auth/AuthPageShell'
-import { EMPRESA_AREAS } from '@/constants/empresaAreas'
 import {
   cnpjCpfLabel,
   formatCnpjCpf,
@@ -15,8 +14,6 @@ import {
   stripCnpjCpf,
 } from '@/lib/validators/cnpjCpf'
 import { validateImageFile } from '@/lib/validators/file'
-import { createEmpresaRecords } from '@/services/empresa/empresaSignup'
-import { uploadAvatar } from '@/services/storage/uploadFile'
 
 const passwordSchema = z
   .string()
@@ -33,7 +30,7 @@ const empresaEtapa1Schema = z.object({
     .min(14, 'Documento inválido')
     .refine(isValidCnpjCpf, 'CNPJ ou CPF inválido'),
   email: z.string().email('E-mail inválido'),
-  area: z.enum(EMPRESA_AREAS, { error: 'Selecione a área de atuação' }),
+  area: z.string().min(1, 'Selecione a área de atuação'),
   password: passwordSchema,
 })
 
@@ -42,12 +39,22 @@ type EmpresaEtapa1Form = z.infer<typeof empresaEtapa1Schema>
 export default function CadastroEmpresaEtapa1Page() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [logoFile, setLogoFile] = useState<File | null>(null)
   const [logoPreview, setLogoPreview] = useState<string | null>(null)
   const [logoError, setLogoError] = useState<string | null>(null)
+  const [segmentos, setSegmentos] = useState<{ label: string; value: string }[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
   const navigate = useNavigate()
   const { showToast } = useToast()
+
+  useEffect(() => {
+    supabase
+      .from('segmentos')
+      .select('nome, ordem')
+      .order('ordem')
+      .then(({ data }) => {
+        if (data) setSegmentos(data.map((s) => ({ label: s.nome, value: s.nome })))
+      })
+  }, [])
 
   const {
     register,
@@ -79,7 +86,6 @@ export default function CadastroEmpresaEtapa1Page() {
     }
 
     setLogoError(null)
-    setLogoFile(file)
     setLogoPreview(URL.createObjectURL(file))
   }
 
@@ -94,37 +100,28 @@ export default function CadastroEmpresaEtapa1Page() {
         area: data.area,
       }
 
-      const { data: authData, error } = await supabase.auth.signUp({
+      const { error } = await supabase.auth.signUp({
         email: data.email,
         password: data.password,
         options: {
-          emailRedirectTo: `${window.location.origin}/login`,
           data: metadata,
         },
       })
 
       if (error) throw error
-      if (!authData.user) throw new Error('Não foi possível criar a conta.')
 
-      let avatarUrl: string | null = null
-
-      if (authData.session) {
-        if (logoFile) {
-          avatarUrl = await uploadAvatar(authData.user.id, logoFile)
-        }
-        await createEmpresaRecords(authData.user.id, {
-          ...data,
-          avatar_url: avatarUrl,
+      sessionStorage.setItem(
+        'qe_pending_empresa',
+        JSON.stringify({
+          nome: data.nome,
+          email: data.email,
+          cnpj_cpf: data.cnpj_cpf,
+          area: data.area,
+          avatar_url: null,
         })
-      }
-
-      showToast(
-        'Empresa cadastrada! Confirme seu e-mail para enviar os documentos (etapa 2).',
-        'success'
       )
-      navigate('/login', {
-        state: { message: 'Confirme seu e-mail e faça login para enviar os documentos.' },
-      })
+
+      navigate(`/verificar-email?email=${encodeURIComponent(data.email)}&tipo=empresa`)
     } catch (error: any) {
       console.error('Erro detalhado no cadastro de empresa (Etapa 1):', error)
       let message = 'Erro ao cadastrar empresa.'
@@ -210,7 +207,7 @@ export default function CadastroEmpresaEtapa1Page() {
             <Select
               label="Área de atuação"
               placeholder="Selecione uma área"
-              options={EMPRESA_AREAS.map((a) => ({ label: a, value: a }))}
+              options={segmentos}
               value={field.value}
               onChange={field.onChange}
               onBlur={field.onBlur}

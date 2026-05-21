@@ -436,10 +436,10 @@ export default function EmpresaDashboard() {
           ) : (
             <div className="space-y-4">
               {activeJobs.map((job) => {
-                const pendingCount = (job.applications || []).filter(
+                const pendingApps = (job.applications || []).filter(
                   (a) => a.status === 'pendente'
-                ).length
-                const totalApps = job.applications?.length || 0
+                )
+                const pendingCount = pendingApps.length
 
                 return (
                   <div
@@ -493,10 +493,10 @@ export default function EmpresaDashboard() {
                     {/* Candidatos e Botão */}
                     <div className="flex items-center justify-between pt-2">
                       <div className="flex items-center gap-3">
-                        {/* Avatares dos candidatos aprovados ou aplicados (máx 3) */}
-                        {totalApps > 0 ? (
+                        {/* Avatares de candidatos pendentes (máx 3) */}
+                        {pendingCount > 0 ? (
                           <div className="flex -space-x-2.5 overflow-hidden">
-                            {job.applications?.slice(0, 3).map((app) => (
+                            {pendingApps.slice(0, 3).map((app) => (
                               <Avatar
                                 key={app.id}
                                 size="xs"
@@ -505,9 +505,9 @@ export default function EmpresaDashboard() {
                                 className="border-2 border-white"
                               />
                             ))}
-                            {totalApps > 3 && (
+                            {pendingCount > 3 && (
                               <div className="w-7 h-7 rounded-full bg-qe-gray-100 text-qe-gray-500 flex items-center justify-center text-[10px] font-bold border-2 border-white select-none shrink-0">
-                                +{totalApps - 3}
+                                +{pendingCount - 3}
                               </div>
                             )}
                           </div>
