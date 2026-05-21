@@ -172,6 +172,10 @@ export function CandidatosTab({
   const [experiences, setExperiences] = React.useState<Experience[]>([])
   const [loadingExp, setLoadingExp] = React.useState(false)
 
+  // Sheet pós-aprovação: encerrar vaga
+  const [showCloseJobSheet, setShowCloseJobSheet] = React.useState(false)
+  const [closingJob, setClosingJob] = React.useState(false)
+
   // -------------------------------------------------------------------------
   // Busca candidaturas
   // -------------------------------------------------------------------------
@@ -352,6 +356,8 @@ export function CandidatosTab({
         },
         { replace: true }
       )
+      // Pergunta se quer encerrar a vaga (só quando estamos numa vaga específica)
+      if (jobId) setShowCloseJobSheet(true)
     } catch {
       showToast('Erro ao aprovar candidato.', 'error')
     } finally {
@@ -397,6 +403,21 @@ export function CandidatosTab({
     setProfileTarget(app)
     setIsProfileOpen(true)
     if (app.freelancers?.id) fetchExperiences(app.freelancers.id)
+  }
+
+  const handleCloseJobFromApproval = async () => {
+    if (!jobId) return
+    try {
+      setClosingJob(true)
+      const { error } = await supabase.from('jobs').update({ status: 'finalizada' }).eq('id', jobId)
+      if (error) throw error
+      showToast('Vaga encerrada com sucesso!', 'success')
+    } catch {
+      showToast('Erro ao encerrar vaga.', 'error')
+    } finally {
+      setClosingJob(false)
+      setShowCloseJobSheet(false)
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -653,6 +674,42 @@ export function CandidatosTab({
             </Button>
             <Button variant="danger" size="sm" onClick={handleReject} loading={isActionLoading}>
               Recusar Candidato
+            </Button>
+          </div>
+        </div>
+      </ResponsiveSheet>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Sheet: Encerrar vaga pós-aprovação                                 */}
+      {/* ------------------------------------------------------------------ */}
+      <ResponsiveSheet
+        open={showCloseJobSheet}
+        onClose={() => !closingJob && setShowCloseJobSheet(false)}
+        title="Encerrar Vaga?"
+      >
+        <div className="p-4 pb-8 space-y-4">
+          <p className="text-[14px] text-qe-gray-600 leading-relaxed">
+            Você acabou de aprovar um profissional. Deseja encerrar esta vaga agora e removê-la do
+            feed dos freelancers?
+          </p>
+          <div className="flex gap-3">
+            <Button
+              variant="secondary"
+              size="md"
+              className="flex-1"
+              onClick={() => setShowCloseJobSheet(false)}
+              disabled={closingJob}
+            >
+              Não, manter aberta
+            </Button>
+            <Button
+              variant="danger"
+              size="md"
+              className="flex-1"
+              loading={closingJob}
+              onClick={handleCloseJobFromApproval}
+            >
+              Sim, encerrar
             </Button>
           </div>
         </div>
