@@ -6,7 +6,7 @@ export interface EmpresaEtapa1Data {
   nome: string
   cnpj_cpf: string
   email: string
-  password: string
+  password?: string
   area: EmpresaArea
   avatar_url?: string | null
 }

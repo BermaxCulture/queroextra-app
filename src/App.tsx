@@ -12,6 +12,7 @@ import ParaEmpresas from '@/pages/ParaEmpresas'
 import LoginPage from '@/pages/auth/LoginPage'
 import CadastroPage from '@/pages/auth/CadastroPage'
 import CadastroEmpresaEtapa1Page from '@/pages/auth/CadastroEmpresaEtapa1Page'
+import VerificarEmailPage from '@/pages/auth/VerificarEmailPage'
 import CadastroEmpresaEtapa2Page from '@/pages/auth/CadastroEmpresaEtapa2Page'
 import EmpresaAguardandoPage from '@/pages/empresa/EmpresaAguardandoPage'
 import { EmpresaRouteGuard } from '@/components/empresa/EmpresaRouteGuard'
@@ -53,6 +54,7 @@ function App() {
             <Route path="/login" element={<GuestRoute><LoginPage /></GuestRoute>} />
             <Route path="/cadastro" element={<GuestRoute><CadastroPage /></GuestRoute>} />
             <Route path="/cadastro/empresa" element={<GuestRoute><CadastroEmpresaEtapa1Page /></GuestRoute>} />
+            <Route path="/verificar-email" element={<VerificarEmailPage />} />
             <Route
               path="/cadastro/empresa/documentos"
               element={

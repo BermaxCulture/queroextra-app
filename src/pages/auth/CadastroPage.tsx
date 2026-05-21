@@ -62,30 +62,6 @@ const passwordRules = [
   { label: 'Um símbolo (#, *, etc)', test: (pw: string) => /[^A-Za-z0-9]/.test(pw) },
 ]
 
-async function createFreelancerProfile(userId: string, data: FreelancerCadastroData) {
-  const { error: profileError } = await supabase.from('profiles').upsert(
-    {
-      id: userId,
-      tipo: 'freelancer',
-      nome: data.nome,
-      email: data.email,
-      celular: stripPhone(data.celular),
-      status: 'ativo',
-    },
-    { onConflict: 'id' }
-  )
-  if (profileError) throw profileError
-
-  const { error: freelancerError } = await supabase.from('freelancers').upsert(
-    {
-      profile_id: userId,
-      cpf: stripCpf(data.cpf),
-      habilidades: data.habilidades,
-    },
-    { onConflict: 'profile_id' }
-  )
-  if (freelancerError) throw freelancerError
-}
 
 export default function CadastroPage() {
   const [showPassword, setShowPassword] = useState(false)
@@ -139,11 +115,10 @@ export default function CadastroPage() {
   const onSubmit = async (data: FreelancerCadastroData) => {
     setLoading(true)
     try {
-      const { data: authData, error } = await supabase.auth.signUp({
+      const { error } = await supabase.auth.signUp({
         email: data.email,
         password: data.password,
         options: {
-          emailRedirectTo: `${window.location.origin}/login`,
           data: {
             nome: data.nome,
             tipo: 'freelancer',
@@ -156,15 +131,7 @@ export default function CadastroPage() {
 
       if (error) throw error
 
-      if (authData.user && authData.session) {
-        await createFreelancerProfile(authData.user.id, data)
-      }
-
-      showToast(
-        'Cadastro realizado! Verifique seu e-mail para confirmar a conta.',
-        'success'
-      )
-      navigate('/login')
+      navigate(`/verificar-email?email=${encodeURIComponent(data.email)}&tipo=freelancer`)
     } catch (error: any) {
       console.error('Erro detalhado no cadastro de freelancer:', error)
       let message = 'Erro ao realizar cadastro.'

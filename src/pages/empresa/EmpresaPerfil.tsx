@@ -1,60 +1,160 @@
 import * as React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { z } from 'zod'
-import { useForm } from 'react-hook-form'
+import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
   Avatar,
   Button,
   Input,
+  Select,
   ResponsiveSheet,
   useToast,
 } from '@/components/ui'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
-import { Building2, Mail, FileText, LogOut, Eye, Pencil } from 'lucide-react'
+import {
+  cnpjCpfLabel,
+  formatCnpjCpf,
+  isValidCnpjCpf,
+  stripCnpjCpf,
+} from '@/lib/validators/cnpjCpf'
+import { Building2, Mail, FileText, LogOut, Eye, Pencil, Lock, EyeOff } from 'lucide-react'
+
+// ── Schemas ──────────────────────────────────────────────────────────────────
 
 const editSchema = z.object({
-  nome: z.string().min(3, 'Nome deve ter pelo menos 3 caracteres'),
-  area: z.string().min(2, 'Informe o segmento de atuação'),
+  nome:     z.string().min(3, 'Nome deve ter pelo menos 3 caracteres'),
+  cnpj_cpf: z.string().min(14, 'Documento inválido').refine(isValidCnpjCpf, 'CNPJ ou CPF inválido'),
+  email:    z.string().email('E-mail inválido'),
+  area:     z.string().min(1, 'Selecione o segmento'),
 })
 type EditFormData = z.infer<typeof editSchema>
+
+const passwordSchema = z
+  .object({
+    newPassword:     z
+      .string()
+      .min(8, 'Mínimo 8 caracteres')
+      .regex(/[A-Z]/, 'Deve conter letra maiúscula')
+      .regex(/[a-z]/, 'Deve conter letra minúscula')
+      .regex(/[0-9]/, 'Deve conter um número')
+      .regex(/[^A-Za-z0-9]/, 'Deve conter caractere especial'),
+    confirmPassword: z.string(),
+  })
+  .refine((d) => d.newPassword === d.confirmPassword, {
+    message: 'As senhas não coincidem',
+    path:    ['confirmPassword'],
+  })
+type PasswordFormData = z.infer<typeof passwordSchema>
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export default function EmpresaPerfil() {
   const { profile, company, signOut } = useAuth()
   const navigate = useNavigate()
   const { showToast } = useToast()
 
-  const [showEditSheet, setShowEditSheet] = React.useState(false)
-  const [showLogoutSheet, setShowLogoutSheet] = React.useState(false)
-  const [saving, setSaving] = React.useState(false)
-  const [loggingOut, setLoggingOut] = React.useState(false)
+  // Sheet visibility
+  const [showEditSheet,     setShowEditSheet]     = React.useState(false)
+  const [showPasswordSheet, setShowPasswordSheet] = React.useState(false)
+  const [showLogoutSheet,   setShowLogoutSheet]   = React.useState(false)
 
-  // Local overrides after successful save — avoids full page reload
-  const [localNome, setLocalNome] = React.useState(profile?.nome ?? '')
-  const [localArea, setLocalArea] = React.useState(company?.area ?? '')
+  // Loading states
+  const [saving,      setSaving]      = React.useState(false)
+  const [savingPass,  setSavingPass]  = React.useState(false)
+  const [loggingOut,  setLoggingOut]  = React.useState(false)
 
-  const { register, handleSubmit, formState: { errors }, reset } = useForm<EditFormData>({
-    resolver: zodResolver(editSchema),
-    defaultValues: { nome: profile?.nome ?? '', area: company?.area ?? '' },
-  })
+  // Password visibility
+  const [showNew,     setShowNew]     = React.useState(false)
+  const [showConfirm, setShowConfirm] = React.useState(false)
+
+  // Segmentos from DB
+  const [segmentos, setSegmentos] = React.useState<{ label: string; value: string }[]>([])
 
   React.useEffect(() => {
-    if (showEditSheet) reset({ nome: localNome, area: localArea })
+    supabase
+      .from('segmentos')
+      .select('nome, ordem')
+      .order('ordem')
+      .then(({ data }) => {
+        if (data) setSegmentos(data.map((s) => ({ label: s.nome, value: s.nome })))
+      })
+  }, [])
+
+  // Local overrides — updated optimistically after save (no full page reload)
+  const [localNome,    setLocalNome]    = React.useState(profile?.nome ?? '')
+  const [localArea,    setLocalArea]    = React.useState(company?.area ?? '')
+  const [localCnpjCpf, setLocalCnpjCpf] = React.useState(
+    company?.cnpj_cpf ? formatCnpjCpf(company.cnpj_cpf) : ''
+  )
+
+  // ── Edit form ──────────────────────────────────────────────────────────────
+
+  const {
+    register: regEdit,
+    handleSubmit: handleEditSubmit,
+    setValue: setEditValue,
+    watch: watchEdit,
+    control: editControl,
+    formState: { errors: editErrors },
+    reset: resetEdit,
+  } = useForm<EditFormData>({
+    resolver: zodResolver(editSchema),
+    defaultValues: {
+      nome:     profile?.nome ?? '',
+      cnpj_cpf: company?.cnpj_cpf ? formatCnpjCpf(company.cnpj_cpf) : '',
+      email:    profile?.email ?? '',
+      area:     company?.area ?? '',
+    },
+  })
+
+  const cnpjCpfValue = watchEdit('cnpj_cpf', '')
+  const docLabel = cnpjCpfValue.length > 0 ? cnpjCpfLabel(cnpjCpfValue) : 'CNPJ ou CPF'
+
+  React.useEffect(() => {
+    if (showEditSheet) {
+      resetEdit({
+        nome:     localNome,
+        cnpj_cpf: localCnpjCpf,
+        email:    profile?.email ?? '',
+        area:     localArea,
+      })
+    }
   }, [showEditSheet])
 
-  const onSubmit = async (data: EditFormData) => {
+  const onEditSubmit = async (data: EditFormData) => {
     try {
       setSaving(true)
-      const [profileRes, companyRes] = await Promise.all([
-        supabase.from('profiles').update({ nome: data.nome }).eq('id', profile!.id),
-        supabase.from('companies').update({ area: data.area }).eq('id', company!.id),
-      ])
+
+      const profileRes = await supabase
+        .from('profiles')
+        .update({ nome: data.nome })
+        .eq('id', profile!.id)
       if (profileRes.error) throw profileRes.error
+
+      const companyRes = await supabase
+        .from('companies')
+        .update({ area: data.area, cnpj_cpf: stripCnpjCpf(data.cnpj_cpf) })
+        .eq('id', company!.id)
       if (companyRes.error) throw companyRes.error
+
+      const emailChanged =
+        data.email.trim().toLowerCase() !== (profile?.email ?? '').toLowerCase()
+      if (emailChanged) {
+        const { error: emailErr } = await supabase.auth.updateUser({ email: data.email.trim() })
+        if (emailErr) throw emailErr
+      }
+
       setLocalNome(data.nome)
       setLocalArea(data.area)
-      showToast('Perfil atualizado com sucesso!', 'success')
+      setLocalCnpjCpf(data.cnpj_cpf)
+
+      const msg = emailChanged
+        ? `Perfil atualizado! Confirme o novo e-mail enviado para ${data.email}.`
+        : 'Perfil atualizado com sucesso!'
+
+      showToast(msg, 'success')
       setShowEditSheet(false)
     } catch {
       showToast('Erro ao salvar alterações', 'error')
@@ -62,6 +162,35 @@ export default function EmpresaPerfil() {
       setSaving(false)
     }
   }
+
+  // ── Password form ──────────────────────────────────────────────────────────
+
+  const {
+    register: regPass,
+    handleSubmit: handlePassSubmit,
+    formState: { errors: passErrors },
+    reset: resetPass,
+  } = useForm<PasswordFormData>({ resolver: zodResolver(passwordSchema) })
+
+  React.useEffect(() => {
+    if (!showPasswordSheet) resetPass()
+  }, [showPasswordSheet])
+
+  const onPasswordSubmit = async (data: PasswordFormData) => {
+    try {
+      setSavingPass(true)
+      const { error } = await supabase.auth.updateUser({ password: data.newPassword })
+      if (error) throw error
+      showToast('Senha alterada com sucesso!', 'success')
+      setShowPasswordSheet(false)
+    } catch {
+      showToast('Erro ao alterar senha', 'error')
+    } finally {
+      setSavingPass(false)
+    }
+  }
+
+  // ── Logout ─────────────────────────────────────────────────────────────────
 
   const handleLogout = async () => {
     try {
@@ -73,6 +202,8 @@ export default function EmpresaPerfil() {
     }
   }
 
+  // ── Render ─────────────────────────────────────────────────────────────────
+
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
@@ -83,7 +214,7 @@ export default function EmpresaPerfil() {
       </div>
 
       <div className="bg-qe-white rounded-qe-md border border-qe-gray-200 p-6 md:p-8 space-y-6 shadow-qe-sm">
-        {/* Header com avatar */}
+        {/* Header */}
         <div className="flex flex-col sm:flex-row items-center gap-4 pb-6 border-b border-qe-gray-100">
           <Avatar
             src={profile?.avatar_url || undefined}
@@ -100,7 +231,7 @@ export default function EmpresaPerfil() {
           </div>
         </div>
 
-        {/* Campos somente leitura */}
+        {/* Read-only fields */}
         <div className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1">
@@ -115,7 +246,7 @@ export default function EmpresaPerfil() {
               <span className="text-label text-qe-gray-400 uppercase">Documento (CNPJ/CPF)</span>
               <div className="flex items-center gap-2 p-3 bg-qe-gray-50 border border-qe-gray-100 rounded-qe-sm text-[14px] text-qe-gray-700">
                 <FileText size={15} className="text-qe-gray-400 shrink-0" />
-                <span>{company?.cnpj_cpf || 'Não cadastrado'}</span>
+                <span>{localCnpjCpf || company?.cnpj_cpf || 'Não cadastrado'}</span>
               </div>
             </div>
           </div>
@@ -129,7 +260,7 @@ export default function EmpresaPerfil() {
           </div>
         </div>
 
-        {/* Ações */}
+        {/* Actions */}
         <div className="pt-6 border-t border-qe-gray-100 flex flex-col sm:flex-row gap-3 justify-between">
           <div className="flex flex-col sm:flex-row gap-3">
             <Button
@@ -139,6 +270,16 @@ export default function EmpresaPerfil() {
               onClick={() => setShowEditSheet(true)}
             >
               Editar Informações
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="md"
+              leadingIcon={<Lock size={15} />}
+              className="border border-qe-gray-200"
+              onClick={() => setShowPasswordSheet(true)}
+            >
+              Alterar Senha
             </Button>
 
             {company?.id && (
@@ -170,23 +311,115 @@ export default function EmpresaPerfil() {
       <ResponsiveSheet
         open={showEditSheet}
         onClose={() => setShowEditSheet(false)}
-        title="Editar Perfil"
+        title="Editar Informações"
       >
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 p-4 pb-8">
+        <form onSubmit={handleEditSubmit(onEditSubmit)} className="space-y-4 p-4 pb-8">
           <Input
             label="Nome da Empresa"
             placeholder="Ex: Restaurante Bella Vista"
-            errorMessage={errors.nome?.message}
-            {...register('nome')}
+            errorMessage={editErrors.nome?.message}
+            {...regEdit('nome')}
           />
+
           <Input
-            label="Segmento / Área de Atuação"
-            placeholder="Ex: Alimentação, Eventos, Construção..."
-            errorMessage={errors.area?.message}
-            {...register('area')}
+            label={docLabel}
+            placeholder={docLabel === 'CNPJ' ? '00.000.000/0000-00' : '000.000.000-00'}
+            inputMode="numeric"
+            errorMessage={editErrors.cnpj_cpf?.message}
+            {...regEdit('cnpj_cpf')}
+            onChange={(e) =>
+              setEditValue('cnpj_cpf', formatCnpjCpf(e.target.value), { shouldValidate: true })
+            }
           />
+
+          <div className="space-y-1">
+            <Input
+              label="E-mail de Acesso"
+              type="email"
+              placeholder="contato@empresa.com"
+              errorMessage={editErrors.email?.message}
+              {...regEdit('email')}
+            />
+            <p className="text-[12px] text-qe-gray-400 leading-relaxed px-1">
+              Ao alterar, um e-mail de confirmação será enviado para o novo endereço.
+            </p>
+          </div>
+
+          <Controller
+            name="area"
+            control={editControl}
+            render={({ field }) => (
+              <Select
+                label="Segmento / Área de Atuação"
+                placeholder="Selecione um segmento"
+                options={segmentos}
+                value={field.value}
+                onChange={field.onChange}
+                onBlur={field.onBlur}
+                errorMessage={editErrors.area?.message}
+              />
+            )}
+          />
+
           <Button type="submit" variant="primary" size="lg" className="w-full" loading={saving}>
             Salvar Alterações
+          </Button>
+        </form>
+      </ResponsiveSheet>
+
+      {/* Sheet: Alterar Senha */}
+      <ResponsiveSheet
+        open={showPasswordSheet}
+        onClose={() => setShowPasswordSheet(false)}
+        title="Alterar Senha"
+      >
+        <form onSubmit={handlePassSubmit(onPasswordSubmit)} className="space-y-4 p-4 pb-8">
+          <div className="relative">
+            <Input
+              label="Nova Senha"
+              type={showNew ? 'text' : 'password'}
+              placeholder="••••••••"
+              autoComplete="new-password"
+              errorMessage={passErrors.newPassword?.message}
+              {...regPass('newPassword')}
+            />
+            <button
+              type="button"
+              onClick={() => setShowNew((v) => !v)}
+              className="absolute right-4 top-[42px] text-qe-gray-400 hover:text-qe-gray-600 transition-colors"
+              tabIndex={-1}
+              aria-label={showNew ? 'Ocultar senha' : 'Mostrar senha'}
+            >
+              {showNew ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </div>
+
+          <div className="relative">
+            <Input
+              label="Confirmar Nova Senha"
+              type={showConfirm ? 'text' : 'password'}
+              placeholder="••••••••"
+              autoComplete="new-password"
+              errorMessage={passErrors.confirmPassword?.message}
+              {...regPass('confirmPassword')}
+            />
+            <button
+              type="button"
+              onClick={() => setShowConfirm((v) => !v)}
+              className="absolute right-4 top-[42px] text-qe-gray-400 hover:text-qe-gray-600 transition-colors"
+              tabIndex={-1}
+              aria-label={showConfirm ? 'Ocultar senha' : 'Mostrar senha'}
+            >
+              {showConfirm ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </div>
+
+          <p className="text-[12px] text-qe-gray-400 leading-relaxed px-1">
+            A senha deve ter mínimo 8 caracteres, letra maiúscula, minúscula, número e caractere especial.
+          </p>
+
+          <Button type="submit" variant="primary" size="lg" className="w-full" loading={savingPass}>
+            Alterar Senha
           </Button>
         </form>
       </ResponsiveSheet>

@@ -13,6 +13,7 @@ import {
   EmptyState,
   SkeletonCard,
   Tabs,
+  ResponsiveSheet,
 } from '@/components/ui'
 import type { TabItem } from '@/components/ui'
 import {
@@ -23,6 +24,8 @@ import {
   FileText,
   Gift,
   Zap,
+  MoreVertical,
+  XCircle,
 } from 'lucide-react'
 import { JOB_CATEGORIES, BRAZIL_STATES, STATUS_LABELS } from './jobConstants'
 import { CandidatosTab } from '@/components/empresa/CandidatosTab'
@@ -113,6 +116,23 @@ export default function VagaDetalhe() {
   const [isEditMode, setIsEditMode] = React.useState(false)
   const [isSubmitting, setIsSubmitting] = React.useState(false)
   const [selectedTags, setSelectedTags] = React.useState<string[]>([])
+
+  // Actions menu
+  const [showActionsMenu, setShowActionsMenu] = React.useState(false)
+  const [showCloseJobSheet, setShowCloseJobSheet] = React.useState(false)
+  const [closingJob, setClosingJob] = React.useState(false)
+  const menuRef = React.useRef<HTMLDivElement>(null)
+
+  React.useEffect(() => {
+    if (!showActionsMenu) return
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setShowActionsMenu(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showActionsMenu])
 
   const initialTab = searchParams.get('tab') === 'candidatos' ? 'candidatos' : 'detalhes'
   const [activeMainTab, setActiveMainTab] = React.useState<MainTab>(initialTab as MainTab)
@@ -225,6 +245,22 @@ export default function VagaDetalhe() {
     }
   }
 
+  const handleCloseJob = async () => {
+    if (!jobId) return
+    try {
+      setClosingJob(true)
+      const { error } = await supabase.from('jobs').update({ status: 'finalizada' }).eq('id', jobId)
+      if (error) throw error
+      setJob((prev) => prev ? { ...prev, status: 'finalizada' } : prev)
+      showToast('Vaga encerrada com sucesso!', 'success')
+      setShowCloseJobSheet(false)
+    } catch {
+      showToast('Erro ao encerrar vaga.', 'error')
+    } finally {
+      setClosingJob(false)
+    }
+  }
+
   if (loadingJob) {
     return (
       <div className="max-w-4xl mx-auto space-y-6">
@@ -275,6 +311,36 @@ export default function VagaDetalhe() {
             </Badge>
           </div>
         </div>
+
+        {/* Menu de ações — apenas para vagas ativas */}
+        {(job.status === 'aberta' || job.status === 'em_andamento') && (
+          <div className="relative shrink-0" ref={menuRef}>
+            <button
+              type="button"
+              onClick={() => setShowActionsMenu((v) => !v)}
+              className="p-2 rounded-qe-sm text-qe-gray-500 hover:bg-qe-gray-100 transition-colors"
+              aria-label="Mais ações"
+            >
+              <MoreVertical size={20} />
+            </button>
+
+            {showActionsMenu && (
+              <div className="absolute right-0 top-full mt-1 w-52 bg-white rounded-qe-md border border-qe-gray-200 shadow-qe-sm z-20 overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowActionsMenu(false)
+                    setShowCloseJobSheet(true)
+                  }}
+                  className="w-full flex items-center gap-2.5 px-4 py-3 text-[14px] text-qe-error hover:bg-qe-error-bg transition-colors"
+                >
+                  <XCircle size={16} />
+                  Encerrar Vaga
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Tabs principais */}
@@ -562,6 +628,40 @@ export default function VagaDetalhe() {
       {activeMainTab === 'candidatos' && (
         <CandidatosTab jobId={jobId} hideJobInfo tabParamName="candidatoStatus" />
       )}
+
+      {/* Sheet: Confirmar encerramento da vaga */}
+      <ResponsiveSheet
+        open={showCloseJobSheet}
+        onClose={() => !closingJob && setShowCloseJobSheet(false)}
+        title="Encerrar Vaga"
+      >
+        <div className="p-4 pb-8 space-y-4">
+          <p className="text-[14px] text-qe-gray-600 leading-relaxed">
+            Ao encerrar, a vaga <strong className="text-qe-gray-900">{job.titulo}</strong> será
+            removida do feed dos freelancers e não aceitará novas candidaturas.
+          </p>
+          <div className="flex gap-3">
+            <Button
+              variant="secondary"
+              size="md"
+              className="flex-1"
+              onClick={() => setShowCloseJobSheet(false)}
+              disabled={closingJob}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="danger"
+              size="md"
+              className="flex-1"
+              loading={closingJob}
+              onClick={handleCloseJob}
+            >
+              Encerrar Vaga
+            </Button>
+          </div>
+        </div>
+      </ResponsiveSheet>
     </div>
   )
 }
