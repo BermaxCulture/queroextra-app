@@ -12,6 +12,7 @@ import VagaDetalhesPage from './VagaDetalhesPage'
 import MeusExtrasPage from './MeusExtrasPage'
 import PerfilPage from './PerfilPage'
 import EmpresaPerfilPage from './EmpresaPerfilPage'
+import FreelancerCheckinPage from './FreelancerCheckinPage'
 
 const freelancerSidebarItems: SidebarItem[] = [
   { value: 'explorar', label: 'Explorar', icon: <Compass size={20} /> },
@@ -89,7 +90,9 @@ export default function ExtrasHome() {
     navigate(`/extras/${tab}`)
   }
 
-  const showBottomNav = !location.pathname.includes('/extras/vaga/')
+  const showBottomNav =
+    !location.pathname.includes('/extras/vaga/') &&
+    !location.pathname.includes('/extras/checkin/')
 
   return (
     <div className="min-h-screen bg-qe-bg-page lg:flex">
@@ -109,6 +112,7 @@ export default function ExtrasHome() {
           <Route path="vaga/:id" element={<VagaDetalhesPage />} />
           <Route path="empresa/:companyId" element={<EmpresaPerfilPage />} />
           <Route path="extras" element={<MeusExtrasPage />} />
+          <Route path="checkin/:applicationId" element={<FreelancerCheckinPage />} />
           <Route path="carteira" element={<CarteiraPage />} />
           <Route path="perfil" element={<PerfilPage />} />
           <Route path="*" element={<Navigate to="explorar" replace />} />

@@ -1,6 +1,18 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(Select-String -Pattern \"\\\\.md$\")",
+      "mcp__mcp-server-queroextra__list_edge_functions",
+      "mcp__mcp-server-queroextra__deploy_edge_function"
+    ]
+  },
   "enabledMcpjsonServers": [
     "mcp-server-queroextra",
     "supabase-mcp-server-queroextra"
+  ],
+  "disabledMcpjsonServers": [
+    "supabase-simplou",
+    "supabase-personal",
+    "supabase-link-church"
   ]
 }

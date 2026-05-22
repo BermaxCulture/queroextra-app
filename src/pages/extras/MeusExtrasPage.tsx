@@ -20,6 +20,7 @@ import {
   Coffee,
   GlassWater,
   Sparkles,
+  ClipboardCheck,
 } from 'lucide-react'
 
 interface Application {
@@ -283,15 +284,28 @@ export default function MeusExtrasPage() {
                     </div>
                   </div>
 
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    className="flex items-center gap-1 font-semibold text-[13px] px-3.5"
-                    onClick={() => navigate(`/extras/vaga/${app.job_id}`)}
-                  >
-                    Ver Detalhes
-                    <ChevronRight size={14} />
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    {app.status === 'aprovado' && (
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        className="flex items-center gap-1.5 font-semibold text-[13px] px-3.5"
+                        onClick={() => navigate(`/extras/checkin/${app.id}`)}
+                      >
+                        <ClipboardCheck size={14} />
+                        Registro de Ponto
+                      </Button>
+                    )}
+                    <Button
+                      variant={app.status === 'aprovado' ? 'ghost' : 'primary'}
+                      size="sm"
+                      className="flex items-center gap-1 font-semibold text-[13px] px-3.5"
+                      onClick={() => navigate(`/extras/vaga/${app.job_id}`)}
+                    >
+                      Ver Detalhes
+                      <ChevronRight size={14} />
+                    </Button>
+                  </div>
                 </div>
               </div>
             ))}
