@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
@@ -24,6 +24,7 @@ import {
   Eye,
   Briefcase,
   Calendar,
+  Clock,
 } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
@@ -123,6 +124,7 @@ export function CandidatosTab({
 }: CandidatosTabProps) {
   const { company } = useAuth()
   const { showToast } = useToast()
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
 
   // Tab ativa e highlight via URL
@@ -593,22 +595,33 @@ export function CandidatosTab({
                       </div>
                     )}
 
-                    {activeTab === 'aprovado' && celular && (
-                      <div className="flex gap-2 ml-auto">
-                        <a
-                          href={`tel:${celular}`}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-qe-gray-50 border border-qe-gray-200 text-qe-gray-700 text-[12px] font-bold rounded-qe-sm hover:border-qe-gray-300 transition-all"
+                    {activeTab === 'aprovado' && (
+                      <div className="flex gap-2 ml-auto flex-wrap">
+                        {celular && (
+                          <>
+                            <a
+                              href={`tel:${celular}`}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-qe-gray-50 border border-qe-gray-200 text-qe-gray-700 text-[12px] font-bold rounded-qe-sm hover:border-qe-gray-300 transition-all"
+                            >
+                              <Phone size={12} /> Ligar
+                            </a>
+                            <a
+                              href={`https://wa.me/55${celular.replace(/\D/g, '')}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#25D366] text-white text-[12px] font-bold rounded-qe-sm hover:bg-[#20ba59] transition-all"
+                            >
+                              <MessageCircle size={12} /> WhatsApp
+                            </a>
+                          </>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/empresa/vagas/${app.job_id}/checkin/${app.id}`)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-qe-yellow text-qe-black text-[12px] font-bold rounded-qe-sm hover:bg-qe-yellow/80 transition-all"
                         >
-                          <Phone size={12} /> Ligar
-                        </a>
-                        <a
-                          href={`https://wa.me/55${celular.replace(/\D/g, '')}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#25D366] text-white text-[12px] font-bold rounded-qe-sm hover:bg-[#20ba59] transition-all"
-                        >
-                          <MessageCircle size={12} /> WhatsApp
-                        </a>
+                          <Clock size={12} /> Check-In
+                        </button>
                       </div>
                     )}
                   </div>

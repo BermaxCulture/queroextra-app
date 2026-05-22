@@ -10,6 +10,7 @@ import EmpresaCarteira from '../empresa/EmpresaCarteira'
 import EmpresaPerfil from '../empresa/EmpresaPerfil'
 import VagasLista from '../empresa/VagasLista'
 import VagaDetalhe from '../empresa/VagaDetalhe'
+import CheckInHub from '../empresa/CheckInHub'
 import EmpresaPerfilPage from '../extras/EmpresaPerfilPage'
 
 function EmpresaPreviewWrapper() {
@@ -47,6 +48,7 @@ export default function ContratanteHome() {
     if (path.includes('/empresa/perfil-publico')) return 'Prévia do Perfil'
     if (path.includes('/empresa/perfil')) return 'Meu Perfil'
     if (path.includes('/empresa/nova-vaga')) return 'Publicar Vaga'
+    if (/\/empresa\/vagas\/[^/]+\/checkin\/.+/.test(path)) return 'Check-In Hub'
     if (/\/empresa\/vagas\/[^/]+/.test(path)) return 'Detalhe da Vaga'
     if (path === '/empresa/vagas') return 'Minhas Vagas'
     return 'Painel de Gestão'
@@ -61,6 +63,8 @@ export default function ContratanteHome() {
 
   const getBackPath = () => {
     const path = location.pathname
+    const checkinMatch = path.match(/\/empresa\/vagas\/([^/]+)\/checkin\/.+/)
+    if (checkinMatch) return `/empresa/vagas/${checkinMatch[1]}?tab=candidatos&candidatoStatus=aprovado`
     if (/\/empresa\/vagas\/.+/.test(path)) return '/empresa/vagas'
     return '/empresa/gestao'
   }
@@ -144,6 +148,7 @@ export default function ContratanteHome() {
             <Route path="nova-vaga" element={<NovaVaga />} />
             <Route path="candidatos" element={<Candidatos />} />
             <Route path="vagas" element={<VagasLista />} />
+            <Route path="vagas/:id/checkin/:applicationId" element={<CheckInHub />} />
             <Route path="vagas/:id" element={<VagaDetalhe />} />
             <Route path="carteira" element={<EmpresaCarteira />} />
             <Route path="perfil" element={<EmpresaPerfil />} />
