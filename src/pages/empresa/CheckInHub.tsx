@@ -27,7 +27,7 @@ function generateCode(): string {
 }
 
 function formatCode(code: string): string {
-  return code.split('').join('  ')
+  return code.split('').join(' ')
 }
 
 // ── Step indicator ────────────────────────────────────────────────────────────
@@ -329,9 +329,9 @@ export default function CheckInHub() {
                   Código de {activePhase === 'checkin' ? 'Check-In' : 'Check-Out'}
                 </p>
 
-                <div className="bg-qe-gray-50 border border-qe-gray-100 rounded-qe-md px-6 py-5 mx-auto inline-block">
+                <div className="bg-qe-gray-50 border border-qe-gray-100 rounded-qe-md px-4 py-4 lg:px-6 lg:py-5 mx-auto inline-block">
                   <p
-                    className="text-[44px] font-bold text-qe-gray-900 leading-none tracking-[0.2em] tabular-nums"
+                    className="text-[32px] lg:text-[44px] font-bold text-qe-gray-900 leading-none tracking-[0.18em] tabular-nums whitespace-nowrap"
                     aria-label={`Código: ${activeCode}`}
                   >
                     {formatCode(activeCode)}
