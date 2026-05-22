@@ -2,7 +2,7 @@ import * as React from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { Avatar, Button, useToast, SkeletonCard } from '@/components/ui'
-import { Lock, Copy, CheckCircle2, ArrowLeft, Circle } from 'lucide-react'
+import { Lock, Copy, CheckCircle2, ArrowLeft, Circle, Clock } from 'lucide-react'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -18,6 +18,7 @@ interface CheckinRecord {
   tipo:          'checkin' | 'checkout'
   codigo:        string | null
   confirmado_em: string | null
+  expira_em:     string | null
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -28,6 +29,14 @@ function generateCode(): string {
 
 function formatCode(code: string): string {
   return code.split('').join(' ')
+}
+
+function formatCountdown(seconds: number): string {
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const s = seconds % 60
+  if (h > 0) return `${h}h ${m.toString().padStart(2, '0')}min`
+  return `${m}:${s.toString().padStart(2, '0')}`
 }
 
 // ── Step indicator ────────────────────────────────────────────────────────────
@@ -94,6 +103,7 @@ export default function CheckInHub() {
   const [loading,        setLoading]        = React.useState(true)
   const [generating,     setGenerating]     = React.useState(false)
   const [copied,         setCopied]         = React.useState(false)
+  const [now,            setNow]            = React.useState(() => Date.now())
 
   // Derived state
   const checkinConfirmed  = !!checkinRecord?.confirmado_em
@@ -103,6 +113,47 @@ export default function CheckInHub() {
   const activeRecord = activePhase === 'checkin' ? checkinRecord : checkoutRecord
   const activeCode   = activeRecord?.codigo ?? null
   const isConfirmed  = !!activeRecord?.confirmado_em
+
+  // Countdown
+  const secondsLeft = activeRecord?.expira_em && !isConfirmed
+    ? Math.max(0, Math.floor((new Date(activeRecord.expira_em).getTime() - now) / 1000))
+    : null
+  const isExpired = secondsLeft === 0
+
+  // Tick a cada segundo enquanto há código ativo e não confirmado
+  React.useEffect(() => {
+    if (isConfirmed || bothDone || !activeRecord?.expira_em) return
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [isConfirmed, bothDone, activeRecord?.expira_em])
+
+  // Auto-regenera quando expira (chave: id + expira_em evita loop)
+  const regenKeyRef = React.useRef<string | null>(null)
+  React.useEffect(() => {
+    if (!isExpired || !activeRecord?.id || !activeRecord?.expira_em || isConfirmed || generating) return
+    const key = `${activeRecord.id}:${activeRecord.expira_em}`
+    if (regenKeyRef.current === key) return
+    regenKeyRef.current = key
+    ;(async () => {
+      setGenerating(true)
+      try {
+        const { data, error } = await supabase.rpc('regenerate_checkin_code', {
+          p_checkin_id:  activeRecord.id,
+          p_novo_codigo: generateCode(),
+        })
+        if (error) throw error
+        if ((data as { success: boolean }).success) {
+          await fetchCheckins(false)
+        }
+      } catch {
+        showToast('Erro ao regenerar código.', 'error')
+      } finally {
+        setGenerating(false)
+      }
+    })()
+  // fetchCheckins via ref para não criar dependência circular
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isExpired, activeRecord?.id, activeRecord?.expira_em, isConfirmed, generating])
 
   // ── Data ──────────────────────────────────────────────────────────────────
 
@@ -114,7 +165,7 @@ export default function CheckInHub() {
       const { data, error } = await supabase
         .from('checkins')
         .insert({ job_id: jobId, application_id: applicationId, codigo, tipo })
-        .select('id, tipo, codigo, confirmado_em')
+        .select('id, tipo, codigo, confirmado_em, expira_em')
         .single()
 
       if (error) throw error
@@ -133,7 +184,7 @@ export default function CheckInHub() {
     try {
       const { data, error } = await supabase
         .from('checkins')
-        .select('id, tipo, codigo, confirmado_em')
+        .select('id, tipo, codigo, confirmado_em, expira_em')
         .eq('application_id', applicationId)
         .eq('job_id', jobId)
 
@@ -338,6 +389,19 @@ export default function CheckInHub() {
                   </p>
                 </div>
               </div>
+
+              {/* Countdown */}
+              {secondsLeft !== null && (
+                <div className={[
+                  'flex items-center gap-1.5 text-[13px] font-bold tabular-nums',
+                  secondsLeft > 300 ? 'text-qe-success'  :
+                  secondsLeft > 60  ? 'text-qe-warning'  :
+                                      'text-qe-error',
+                ].join(' ')}>
+                  <Clock size={13} />
+                  Expira em {formatCountdown(secondsLeft)}
+                </div>
+              )}
 
               {/* Lock icon */}
               <div className="flex items-center justify-center w-10 h-10 rounded-full bg-qe-gray-100">

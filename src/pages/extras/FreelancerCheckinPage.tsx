@@ -193,9 +193,10 @@ export default function FreelancerCheckinPage() {
 
       if (!result.success) {
         const msg =
-          result.error === 'invalid_code'       ? 'Código incorreto. Tente novamente.'   :
-          result.error === 'already_confirmed'  ? 'Este código já foi utilizado.'         :
-          result.error === 'unauthorized'       ? 'Acesso não autorizado.'                :
+          result.error === 'invalid_code'       ? 'Código incorreto. Tente novamente.'              :
+          result.error === 'expired'            ? 'Código expirado. Peça um novo código à empresa.' :
+          result.error === 'already_confirmed'  ? 'Este código já foi utilizado.'                   :
+          result.error === 'unauthorized'       ? 'Acesso não autorizado.'                          :
                                                   'Erro ao validar. Tente novamente.'
         setCodeError(msg)
         resetOtp()
