@@ -124,38 +124,36 @@ export default function FreelancerCheckinPage() {
   React.useEffect(() => {
     if (!applicationId) return
     const load = async () => {
-      try {
-        const { data, error } = await supabase
+      // Fetch ambos em paralelo — checkins não depende do turnoInfo
+      const [appResult] = await Promise.all([
+        supabase
           .from('applications')
           .select(`
             job_id,
             jobs!inner(
               titulo,
               categoria,
-              companies!inner(
-                profiles!inner(nome)
+              companies(
+                profiles(nome)
               )
             )
           `)
           .eq('id', applicationId)
-          .single()
+          .single(),
+        fetchCheckins(),
+      ])
 
-        if (error) throw error
-
+      if (!appResult.error && appResult.data) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const raw = data as any
+        const raw = appResult.data as any
         setTurnoInfo({
           job_titulo:    raw.jobs?.titulo    ?? '',
           job_categoria: raw.jobs?.categoria ?? null,
           company_nome:  raw.jobs?.companies?.profiles?.nome ?? 'Estabelecimento',
         })
-
-        await fetchCheckins()
-      } catch {
-        showToast('Erro ao carregar turno.', 'error')
-      } finally {
-        setLoading(false)
       }
+
+      setLoading(false)
     }
     load()
   }, [applicationId, fetchCheckins, showToast])
