@@ -163,9 +163,16 @@ export default function FreelancerCheckinPage() {
     if (!applicationId) return
     const channel = supabase
       .channel(`freelancer-checkin-${applicationId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'checkins' }, () => {
-        fetchCheckins()
-      })
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'checkins',
+          filter: `application_id=eq.${applicationId}`,
+        },
+        () => { fetchCheckins() }
+      )
       .subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [applicationId, fetchCheckins])

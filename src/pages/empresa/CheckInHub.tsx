@@ -142,9 +142,7 @@ export default function CheckInHub() {
           p_novo_codigo: generateCode(),
         })
         if (error) throw error
-        if ((data as { success: boolean }).success) {
-          await fetchCheckins(false)
-        }
+        if ((data as { success: boolean }).success) await fetchCheckins(false)
       } catch {
         showToast('Erro ao regenerar código.', 'error')
       } finally {
@@ -179,7 +177,7 @@ export default function CheckInHub() {
     }
   }, [jobId, applicationId, showToast])
 
-  const fetchCheckins = React.useCallback(async (andGenerateIfNeeded = false) => {
+  const fetchCheckins = React.useCallback(async (generateCheckinIfMissing = false) => {
     if (!jobId || !applicationId) return
     try {
       const { data, error } = await supabase
@@ -197,12 +195,8 @@ export default function CheckInHub() {
       setCheckinRecord(checkin)
       setCheckoutRecord(checkout)
 
-      if (andGenerateIfNeeded) {
-        if (!checkin) {
-          await doGenerate('checkin')
-        } else if (checkin.confirmado_em && !checkout) {
-          await doGenerate('checkout')
-        }
+      if (generateCheckinIfMissing && !checkin) {
+        await doGenerate('checkin')
       }
     } catch {
       showToast('Erro ao carregar registros.', 'error')
@@ -240,7 +234,7 @@ export default function CheckInHub() {
           job_categoria:     raw.jobs?.categoria ?? null,
         })
 
-        // Checkins + auto-generate if needed
+        // Checkins + gera checkin se ainda não existe
         await fetchCheckins(true)
       } catch {
         showToast('Erro ao carregar dados.', 'error')
@@ -259,8 +253,13 @@ export default function CheckInHub() {
       .channel(`checkin-hub-${applicationId}`)
       .on(
         'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'checkins' },
-        () => { fetchCheckins(true) }
+        {
+          event: '*',
+          schema: 'public',
+          table: 'checkins',
+          filter: `application_id=eq.${applicationId}`,
+        },
+        () => { fetchCheckins(false) }
       )
       .subscribe()
     return () => { supabase.removeChannel(channel) }
