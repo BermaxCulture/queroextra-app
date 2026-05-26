@@ -27,7 +27,11 @@ import {
   Check,
   X,
   Phone,
+  ClipboardList,
 } from 'lucide-react'
+import { ReviewModal } from '@/components/ReviewModal/ReviewModal'
+import { usePendingReviews } from '@/hooks/useReviews'
+import type { PendingReview } from '@/hooks/useReviews'
 
 // Interfaces
 interface FreelancerProfile {
@@ -84,6 +88,15 @@ export default function EmpresaDashboard() {
   const [activeJobs, setActiveJobs] = React.useState<Job[]>([])
   const [latestFinished, setLatestFinished] = React.useState<Job[]>([])
   
+  // Pending reviews
+  const { reviews: pendingReviews, refresh: refreshReviews } = usePendingReviews(company?.profile_id)
+  const [activeReview,     setActiveReview]     = React.useState<PendingReview | null>(null)
+  const [reviewModalOpen,  setReviewModalOpen]  = React.useState(false)
+
+  const openReview = (review: PendingReview) => { setActiveReview(review); setReviewModalOpen(true) }
+  const closeReview = () => { setReviewModalOpen(false) }
+  const handleReviewDone = () => { setReviewModalOpen(false); refreshReviews() }
+
   // Estados para Modal de Confirmação de Aprovação (MVP sem Stripe)
   const [isConfirmOpen, setIsConfirmOpen] = React.useState(false)
   const [confirmAppId, setConfirmAppId] = React.useState<string | null>(null)
@@ -116,11 +129,12 @@ export default function EmpresaDashboard() {
         0
       )
 
-      // 2. Buscar avaliação média da empresa
+      // 2. Buscar avaliação média da empresa (apenas reviews enviadas)
       const { data: reviews, error: revErr } = await supabase
         .from('reviews')
         .select('nota')
         .eq('avaliado_id', company.profile_id)
+        .eq('status', 'enviada')
 
       if (revErr) throw revErr
 
@@ -384,7 +398,7 @@ export default function EmpresaDashboard() {
           <>
             <StatCard label="Vagas Ativas" value={kpis.activeJobs} subtext="Em andamento ou abertas" />
             <StatCard label="Candidatos Totais" value={kpis.totalCandidates} subtext="Histórico acumulado" />
-            <StatCard label="Finalizadas" value={kpis.finishedJobs} subtext="Concluídas com sucesso" />
+            <StatCard label="Concluídas" value={kpis.finishedJobs} subtext="Finalizadas com sucesso" />
             <StatCard
               label="Avaliação Média"
               value={kpis.avgRating}
@@ -546,8 +560,48 @@ export default function EmpresaDashboard() {
           )}
         </div>
 
-        {/* Coluna Direita: Atalho de Aprovação Rápida & Bloco Precisa Hoje */}
+        {/* Coluna Direita: Avaliações Pendentes + Aprovação Rápida + Precisa Hoje */}
         <div className="lg:col-span-4 space-y-6">
+
+          {/* Avaliações pendentes */}
+          {pendingReviews.length > 0 && (
+            <div className="bg-white rounded-qe-md border border-qe-yellow/40 p-5 shadow-qe-sm space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ClipboardList size={16} className="text-qe-yellow-text" />
+                  <h3 className="text-[15px] font-bold text-qe-gray-900">Avaliações Pendentes</h3>
+                </div>
+                <span className="text-[11px] font-bold bg-qe-yellow/20 text-qe-yellow-text px-2 py-0.5 rounded-full">
+                  {pendingReviews.length}
+                </span>
+              </div>
+              <div className="space-y-3">
+                {pendingReviews.map((rev) => {
+                  const daysLeft = Math.max(0, Math.ceil(
+                    (new Date(rev.expires_at).getTime() - Date.now()) / 86_400_000
+                  ))
+                  return (
+                    <div
+                      key={rev.id}
+                      className="flex items-center justify-between gap-3 p-3 bg-qe-gray-50 rounded-qe-sm border border-qe-gray-100"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <Avatar size="sm" src={rev.avaliado_avatar ?? undefined} name={rev.avaliado_nome} />
+                        <div className="min-w-0">
+                          <div className="text-[13px] font-bold text-qe-gray-900 truncate">{rev.avaliado_nome}</div>
+                          <div className="text-[11px] text-qe-gray-400 truncate">{daysLeft}d restante{daysLeft !== 1 ? 's' : ''}</div>
+                        </div>
+                      </div>
+                      <Button variant="primary" size="sm" onClick={() => openReview(rev)}>
+                        Avaliar
+                      </Button>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Atalho de aprovação */}
           <div className="bg-white rounded-qe-md border border-qe-gray-200 p-5 shadow-qe-sm space-y-4">
             <div className="flex justify-between items-center">
@@ -641,16 +695,16 @@ export default function EmpresaDashboard() {
             </Button>
           </div>
 
-          {/* Últimas Finalizadas */}
+          {/* Últimas Concluídas */}
           <div className="bg-white rounded-qe-md border border-qe-gray-200 p-5 shadow-qe-sm space-y-4">
             <div>
-              <h3 className="text-[15px] font-bold text-qe-gray-900">Últimas Finalizadas</h3>
+              <h3 className="text-[15px] font-bold text-qe-gray-900">Últimas Concluídas</h3>
               <p className="text-[11px] text-qe-gray-400 mt-0.5">Últimos trabalhos concluídos</p>
             </div>
 
             {latestFinished.length === 0 ? (
               <div className="text-center py-6 text-qe-gray-400 text-[13px]">
-                Nenhuma vaga finalizada no histórico.
+                Nenhuma vaga concluída no histórico.
               </div>
             ) : (
               <div className="space-y-3">
@@ -682,7 +736,7 @@ export default function EmpresaDashboard() {
                         )}
                       </div>
                       <div className="text-[11px] text-qe-gray-400">
-                        Finalizada em: {new Date(job.created_at).toLocaleDateString('pt-BR')}
+                        Concluída em: {new Date(job.created_at).toLocaleDateString('pt-BR')}
                       </div>
                     </div>
                   )
@@ -693,6 +747,19 @@ export default function EmpresaDashboard() {
         </div>
 
       </div>
+
+      {/* Modal de Avaliação Pendente */}
+      {activeReview && (
+        <ReviewModal
+          open={reviewModalOpen}
+          onClose={closeReview}
+          reviewId={activeReview.id}
+          avaliadoNome={activeReview.avaliado_nome}
+          avaliadoAvatar={activeReview.avaliado_avatar}
+          jobTitulo={activeReview.job_titulo}
+          onDone={handleReviewDone}
+        />
+      )}
 
       {/* Modal de Confirmação de Aprovação (MVP sem Stripe) */}
       <ResponsiveSheet

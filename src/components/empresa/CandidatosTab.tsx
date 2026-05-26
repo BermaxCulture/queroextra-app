@@ -25,7 +25,11 @@ import {
   Briefcase,
   Calendar,
   Clock,
+  ClipboardList,
 } from 'lucide-react'
+import { ReviewModal } from '@/components/ReviewModal/ReviewModal'
+import { fetchPendingReviews, createPendingReview } from '@/hooks/useReviews'
+import type { PendingReview } from '@/hooks/useReviews'
 
 // ---------------------------------------------------------------------------
 // Tipos
@@ -41,7 +45,7 @@ interface FreelancerProfile {
 interface Application {
   id: string
   job_id: string
-  status: 'pendente' | 'aprovado' | 'rejeitado'
+  status: 'pendente' | 'aprovado' | 'rejeitado' | 'concluido'
   created_at: string
   jobs: {
     id: string
@@ -69,12 +73,13 @@ interface Experience {
   } | null
 }
 
-type CandidateTab = 'pendente' | 'aprovado' | 'rejeitado'
+type CandidateTab = 'pendente' | 'aprovado' | 'rejeitado' | 'concluido'
 
 const CANDIDATE_TABS: TabItem[] = [
-  { label: 'Pendentes', value: 'pendente' },
-  { label: 'Aprovados', value: 'aprovado' },
-  { label: 'Recusados', value: 'rejeitado' },
+  { label: 'Pendentes',  value: 'pendente'  },
+  { label: 'Aprovados',  value: 'aprovado'  },
+  { label: 'Recusados',  value: 'rejeitado' },
+  { label: 'Histórico',  value: 'concluido' },
 ]
 
 // ---------------------------------------------------------------------------
@@ -157,6 +162,37 @@ export function CandidatosTab({
   const [loading, setLoading] = React.useState(true)
   const [isActionLoading, setIsActionLoading] = React.useState(false)
 
+  // Avaliações pendentes (aba Histórico): jobId → PendingReview
+  const [pendingReviewsMap, setPendingReviewsMap] = React.useState<Record<string, PendingReview>>({})
+  // jobIds onde a empresa já enviou avaliação
+  const [reviewedJobIds,   setReviewedJobIds]   = React.useState<Set<string>>(new Set())
+  const [activeReview,     setActiveReview]     = React.useState<PendingReview | null>(null)
+  const [reviewModalOpen,  setReviewModalOpen]  = React.useState(false)
+
+  const openReview = (rev: PendingReview) => { setActiveReview(rev); setReviewModalOpen(true) }
+
+  const refreshHistoricoReviews = React.useCallback(async () => {
+    if (!company?.profile_id) return
+    // Busca reviews enviadas por esta empresa
+    const { data: sent } = await supabase
+      .from('reviews')
+      .select('job_id')
+      .eq('avaliador_id', company.profile_id)
+      .eq('status', 'enviada')
+    setReviewedJobIds(new Set((sent ?? []).map((r: { job_id: string }) => r.job_id)))
+
+    // Busca reviews pendentes
+    const revs = await fetchPendingReviews(company.profile_id)
+    const map: Record<string, PendingReview> = {}
+    for (const r of revs) map[r.job_id] = r
+    setPendingReviewsMap(map)
+  }, [company?.profile_id])
+
+  const handleReviewDone = async () => {
+    setReviewModalOpen(false)
+    await refreshHistoricoReviews()
+  }
+
   // Modais
   const [isApproveOpen, setIsApproveOpen] = React.useState(false)
   const [approveTarget, setApproveTarget] = React.useState<{
@@ -234,12 +270,13 @@ export function CandidatosTab({
         .map((a) => a.freelancers?.profiles?.id)
         .filter((id): id is string => Boolean(id))
 
-      // Ratings
+      // Ratings (apenas reviews enviadas)
       if (profileIds.length > 0) {
         const { data: reviewsData } = await supabase
           .from('reviews')
           .select('avaliado_id, nota')
           .in('avaliado_id', profileIds)
+          .eq('status', 'enviada')
 
         if (reviewsData?.length) {
           const sums: Record<string, { total: number; count: number }> = {}
@@ -253,6 +290,14 @@ export function CandidatosTab({
           setRatings(avgs)
         } else {
           setRatings({})
+        }
+
+        // Avaliações pendentes e enviadas: apenas na aba Histórico
+        if (activeTab === 'concluido') {
+          await refreshHistoricoReviews()
+        } else {
+          setPendingReviewsMap({})
+          setReviewedJobIds(new Set())
         }
 
         // Celulares: apenas na aba aprovados, via função SECURITY DEFINER
@@ -279,7 +324,7 @@ export function CandidatosTab({
     } finally {
       setLoading(false)
     }
-  }, [company?.id, activeTab, jobId, showToast])
+  }, [company?.id, activeTab, jobId, showToast, refreshHistoricoReviews])
 
   React.useEffect(() => { fetchApplications() }, [fetchApplications])
 
@@ -411,11 +456,11 @@ export function CandidatosTab({
     if (!jobId) return
     try {
       setClosingJob(true)
-      const { error } = await supabase.from('jobs').update({ status: 'finalizada' }).eq('id', jobId)
+      const { error } = await supabase.from('jobs').update({ status: 'cancelada' }).eq('id', jobId)
       if (error) throw error
-      showToast('Vaga encerrada com sucesso!', 'success')
+      showToast('Vaga cancelada com sucesso!', 'success')
     } catch {
-      showToast('Erro ao encerrar vaga.', 'error')
+      showToast('Erro ao cancelar vaga.', 'error')
     } finally {
       setClosingJob(false)
       setShowCloseJobSheet(false)
@@ -576,6 +621,33 @@ export function CandidatosTab({
                           <X size={13} /> Recusado
                         </span>
                       )}
+
+                      {activeTab === 'concluido' && (() => {
+                        const pending = pendingReviewsMap[app.job_id]
+                        const alreadyRated = reviewedJobIds.has(app.job_id)
+                        if (pending) {
+                          return (
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              leadingIcon={<Star size={13} />}
+                              onClick={() => openReview(pending)}
+                            >
+                              Avaliar
+                            </Button>
+                          )
+                        }
+                        if (alreadyRated) {
+                          return (
+                            <span className="flex items-center gap-1 text-qe-success font-bold text-[13px]">
+                              <Check size={14} /> Avaliado
+                            </span>
+                          )
+                        }
+                        return (
+                          <span className="text-[12px] text-qe-gray-400 font-medium">Prazo expirado</span>
+                        )
+                      })()}
                     </div>
                   </div>
 
@@ -630,6 +702,21 @@ export function CandidatosTab({
             })}
           </AnimatePresence>
         </div>
+      )}
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Modal: Avaliar freelancer do Histórico                             */}
+      {/* ------------------------------------------------------------------ */}
+      {activeReview && (
+        <ReviewModal
+          open={reviewModalOpen}
+          onClose={() => setReviewModalOpen(false)}
+          reviewId={activeReview.id}
+          avaliadoNome={activeReview.avaliado_nome}
+          avaliadoAvatar={activeReview.avaliado_avatar}
+          jobTitulo={activeReview.job_titulo}
+          onDone={handleReviewDone}
+        />
       )}
 
       {/* ------------------------------------------------------------------ */}
@@ -698,11 +785,11 @@ export function CandidatosTab({
       <ResponsiveSheet
         open={showCloseJobSheet}
         onClose={() => !closingJob && setShowCloseJobSheet(false)}
-        title="Encerrar Vaga?"
+        title="Cancelar Vaga?"
       >
         <div className="p-4 pb-8 space-y-4">
           <p className="text-[14px] text-qe-gray-600 leading-relaxed">
-            Você acabou de aprovar um profissional. Deseja encerrar esta vaga agora e removê-la do
+            Você acabou de aprovar um profissional. Deseja cancelar esta vaga agora e removê-la do
             feed dos freelancers?
           </p>
           <div className="flex gap-3">
@@ -722,7 +809,7 @@ export function CandidatosTab({
               loading={closingJob}
               onClick={handleCloseJobFromApproval}
             >
-              Sim, encerrar
+              Sim, cancelar
             </Button>
           </div>
         </div>

@@ -25,7 +25,7 @@ export const Modal: React.FC<ModalProps> = ({ open, onClose, children, title }) 
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 bg-black/45 z-40"
+            className="fixed inset-0 bg-black/45 z-[9998]"
             onClick={onClose}
             aria-hidden="true"
           />
@@ -40,7 +40,7 @@ export const Modal: React.FC<ModalProps> = ({ open, onClose, children, title }) 
             transition={{ duration: 0.18 }}
             // translateX/Y via Framer Motion para compor corretamente com scale
             style={{ translateX: '-50%', translateY: '-50%' }}
-            className="fixed top-1/2 left-1/2 z-50 bg-qe-white rounded-qe-lg w-[520px] max-h-[80vh] overflow-y-auto shadow-qe-lg"
+            className="fixed top-1/2 left-1/2 z-[9999] bg-qe-white rounded-qe-lg w-[520px] max-h-[80vh] overflow-y-auto shadow-qe-lg"
           >
             {title && (
               <div className="px-5 pt-5 pb-3 text-[17px] font-bold text-qe-gray-900 border-b border-qe-gray-100">

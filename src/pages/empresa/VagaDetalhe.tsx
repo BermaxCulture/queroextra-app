@@ -249,13 +249,13 @@ export default function VagaDetalhe() {
     if (!jobId) return
     try {
       setClosingJob(true)
-      const { error } = await supabase.from('jobs').update({ status: 'finalizada' }).eq('id', jobId)
+      const { error } = await supabase.from('jobs').update({ status: 'cancelada' }).eq('id', jobId)
       if (error) throw error
-      setJob((prev) => prev ? { ...prev, status: 'finalizada' } : prev)
-      showToast('Vaga encerrada com sucesso!', 'success')
+      setJob((prev) => prev ? { ...prev, status: 'cancelada' } : prev)
+      showToast('Vaga cancelada com sucesso!', 'success')
       setShowCloseJobSheet(false)
     } catch {
-      showToast('Erro ao encerrar vaga.', 'error')
+      showToast('Erro ao cancelar vaga.', 'error')
     } finally {
       setClosingJob(false)
     }
@@ -335,7 +335,7 @@ export default function VagaDetalhe() {
                   className="w-full flex items-center gap-2.5 px-4 py-3 text-[14px] text-qe-error hover:bg-qe-error-bg transition-colors"
                 >
                   <XCircle size={16} />
-                  Encerrar Vaga
+                  Cancelar Vaga
                 </button>
               </div>
             )}
@@ -633,11 +633,11 @@ export default function VagaDetalhe() {
       <ResponsiveSheet
         open={showCloseJobSheet}
         onClose={() => !closingJob && setShowCloseJobSheet(false)}
-        title="Encerrar Vaga"
+        title="Cancelar Vaga"
       >
         <div className="p-4 pb-8 space-y-4">
           <p className="text-[14px] text-qe-gray-600 leading-relaxed">
-            Ao encerrar, a vaga <strong className="text-qe-gray-900">{job.titulo}</strong> será
+            Ao cancelar, a vaga <strong className="text-qe-gray-900">{job.titulo}</strong> será
             removida do feed dos freelancers e não aceitará novas candidaturas.
           </p>
           <div className="flex gap-3">
@@ -648,7 +648,7 @@ export default function VagaDetalhe() {
               onClick={() => setShowCloseJobSheet(false)}
               disabled={closingJob}
             >
-              Cancelar
+              Voltar
             </Button>
             <Button
               variant="danger"
@@ -657,7 +657,7 @@ export default function VagaDetalhe() {
               loading={closingJob}
               onClick={handleCloseJob}
             >
-              Encerrar Vaga
+              Sim, cancelar
             </Button>
           </div>
         </div>

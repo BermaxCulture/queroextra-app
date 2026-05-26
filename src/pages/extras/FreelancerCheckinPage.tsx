@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/contexts/AuthContext'
 import { Button, InputOTP, TopBar, useToast, SkeletonCard } from '@/components/ui'
 import {
   ArrowLeft,
@@ -11,13 +12,17 @@ import {
   AlertCircle,
   Lock,
 } from 'lucide-react'
+import { ReviewModal } from '@/components/ReviewModal/ReviewModal'
+import { createPendingReview } from '@/hooks/useReviews'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 interface TurnoInfo {
-  job_titulo:    string
-  job_categoria: string | null
-  company_nome:  string
+  job_titulo:         string
+  job_categoria:      string | null
+  company_nome:       string
+  company_profile_id: string
+  job_id:             string
 }
 
 interface CheckinRecord {
@@ -89,6 +94,7 @@ export default function FreelancerCheckinPage() {
   const { applicationId } = useParams<{ applicationId: string }>()
   const navigate           = useNavigate()
   const { showToast }      = useToast()
+  const { profile }        = useAuth()
 
   const [turnoInfo,       setTurnoInfo]       = React.useState<TurnoInfo | null>(null)
   const [checkinRecord,   setCheckinRecord]   = React.useState<CheckinRecord | null>(null)
@@ -99,11 +105,30 @@ export default function FreelancerCheckinPage() {
   const [code,            setCode]            = React.useState('')
   const [otpKey,          setOtpKey]          = React.useState(0)
 
+  // Review state
+  const [reviewOpen,  setReviewOpen]  = React.useState(false)
+  const [reviewId,    setReviewId]    = React.useState<string | null>(null)
+  const reviewTriggeredRef = React.useRef(false)
+
   // Derived
   const checkinConfirmed  = !!checkinRecord?.confirmado_em
   const checkoutConfirmed = !!checkoutRecord?.confirmado_em
   const bothDone          = checkinConfirmed && checkoutConfirmed
   const activePhase: 'checkin' | 'checkout' = checkinConfirmed ? 'checkout' : 'checkin'
+
+  // When checkout is confirmed: create pending review stub and open modal
+  React.useEffect(() => {
+    if (!bothDone || reviewTriggeredRef.current || !turnoInfo || !profile) return
+    reviewTriggeredRef.current = true
+    ;(async () => {
+      const id = await createPendingReview(
+        turnoInfo.job_id,
+        profile.id,
+        turnoInfo.company_profile_id,
+      )
+      if (id) { setReviewId(id); setReviewOpen(true) }
+    })()
+  }, [bothDone, turnoInfo, profile])
 
   const backPath = '/extras/extras'
 
@@ -131,10 +156,11 @@ export default function FreelancerCheckinPage() {
           .select(`
             job_id,
             jobs!inner(
+              id,
               titulo,
               categoria,
               companies(
-                profiles(nome)
+                profiles(id, nome)
               )
             )
           `)
@@ -147,9 +173,11 @@ export default function FreelancerCheckinPage() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const raw = appResult.data as any
         setTurnoInfo({
-          job_titulo:    raw.jobs?.titulo    ?? '',
-          job_categoria: raw.jobs?.categoria ?? null,
-          company_nome:  raw.jobs?.companies?.profiles?.nome ?? 'Estabelecimento',
+          job_titulo:         raw.jobs?.titulo    ?? '',
+          job_categoria:      raw.jobs?.categoria ?? null,
+          company_nome:       raw.jobs?.companies?.profiles?.nome ?? 'Estabelecimento',
+          company_profile_id: raw.jobs?.companies?.profiles?.id  ?? '',
+          job_id:             raw.jobs?.id ?? raw.job_id ?? '',
         })
       }
 
@@ -243,6 +271,19 @@ export default function FreelancerCheckinPage() {
 
   return (
     <div className="min-h-screen bg-qe-bg-page flex flex-col">
+
+      {/* Review modal triggered after checkout */}
+      {reviewId && turnoInfo && (
+        <ReviewModal
+          open={reviewOpen}
+          onClose={() => setReviewOpen(false)}
+          reviewId={reviewId}
+          avaliadoNome={turnoInfo.company_nome}
+          avaliadoAvatar={null}
+          jobTitulo={turnoInfo.job_titulo}
+          onDone={() => setReviewOpen(false)}
+        />
+      )}
 
       {/* TopBar mobile */}
       <div className="lg:hidden sticky top-0 z-40">
