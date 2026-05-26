@@ -204,7 +204,7 @@ export default function EmpresaDashboard() {
         .eq('company_id', company.id)
         .eq('status', 'finalizada')
         .order('created_at', { ascending: false })
-        .limit(3)
+        .limit(2)
 
       if (finErr) throw finErr
       setLatestFinished((finishedData as unknown as Job[]) || [])
@@ -697,9 +697,18 @@ export default function EmpresaDashboard() {
 
           {/* Últimas Concluídas */}
           <div className="bg-white rounded-qe-md border border-qe-gray-200 p-5 shadow-qe-sm space-y-4">
-            <div>
-              <h3 className="text-[15px] font-bold text-qe-gray-900">Últimas Concluídas</h3>
-              <p className="text-[11px] text-qe-gray-400 mt-0.5">Últimos trabalhos concluídos</p>
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <h3 className="text-[15px] font-bold text-qe-gray-900">Últimas Concluídas</h3>
+                <p className="text-[11px] text-qe-gray-400 mt-0.5">Últimos trabalhos concluídos</p>
+              </div>
+              <button
+                type="button"
+                className="text-[11px] font-bold text-qe-yellow-text hover:underline cursor-pointer shrink-0"
+                onClick={() => navigate('/empresa/vagas?tab=finalizadas')}
+              >
+                Ver todas
+              </button>
             </div>
 
             {latestFinished.length === 0 ? (
@@ -707,6 +716,7 @@ export default function EmpresaDashboard() {
                 Nenhuma vaga concluída no histórico.
               </div>
             ) : (
+              <>
               <div className="space-y-3">
                 {latestFinished.map((job) => {
                   // Achar avaliação que a empresa recebeu ou fez para esta vaga
@@ -742,6 +752,7 @@ export default function EmpresaDashboard() {
                   )
                 })}
               </div>
+              </>
             )}
           </div>
         </div>
