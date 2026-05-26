@@ -1,16 +1,20 @@
 import * as React from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/contexts/AuthContext'
 import { Avatar, Button, useToast, SkeletonCard } from '@/components/ui'
 import { Lock, Copy, CheckCircle2, ArrowLeft, Circle, Clock } from 'lucide-react'
+import { ReviewModal } from '@/components/ReviewModal/ReviewModal'
+import { createPendingReview } from '@/hooks/useReviews'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface AppInfo {
-  freelancer_nome:   string
-  freelancer_avatar: string | null
-  job_titulo:        string
-  job_categoria:     string | null
+  freelancer_nome:       string
+  freelancer_avatar:     string | null
+  freelancer_profile_id: string
+  job_titulo:            string
+  job_categoria:         string | null
 }
 
 interface CheckinRecord {
@@ -94,8 +98,9 @@ function StepIndicator({ checkinDone, checkoutDone, activePhase }: StepIndicator
 
 export default function CheckInHub() {
   const { id: jobId, applicationId } = useParams<{ id: string; applicationId: string }>()
-  const navigate = useNavigate()
+  const navigate   = useNavigate()
   const { showToast } = useToast()
+  const { profile } = useAuth()
 
   const [appInfo,        setAppInfo]        = React.useState<AppInfo | null>(null)
   const [checkinRecord,  setCheckinRecord]  = React.useState<CheckinRecord | null>(null)
@@ -105,10 +110,25 @@ export default function CheckInHub() {
   const [copied,         setCopied]         = React.useState(false)
   const [now,            setNow]            = React.useState(() => Date.now())
 
+  // Review state
+  const [reviewOpen,  setReviewOpen]  = React.useState(false)
+  const [reviewId,    setReviewId]    = React.useState<string | null>(null)
+  const reviewTriggeredRef = React.useRef(false)
+
   // Derived state
   const checkinConfirmed  = !!checkinRecord?.confirmado_em
   const checkoutConfirmed = !!checkoutRecord?.confirmado_em
   const bothDone          = checkinConfirmed && checkoutConfirmed
+
+  // When checkout is confirmed: create pending review stub and open modal
+  React.useEffect(() => {
+    if (!bothDone || reviewTriggeredRef.current || !appInfo || !profile || !jobId) return
+    reviewTriggeredRef.current = true
+    ;(async () => {
+      const id = await createPendingReview(jobId, profile.id, appInfo.freelancer_profile_id)
+      if (id) { setReviewId(id); setReviewOpen(true) }
+    })()
+  }, [bothDone, appInfo, profile, jobId])
   const activePhase: 'checkin' | 'checkout' = checkinConfirmed ? 'checkout' : 'checkin'
   const activeRecord = activePhase === 'checkin' ? checkinRecord : checkoutRecord
   const activeCode   = activeRecord?.codigo ?? null
@@ -217,7 +237,7 @@ export default function CheckInHub() {
             job_id,
             jobs!inner(titulo, categoria),
             freelancers!inner(
-              profiles!inner(nome, avatar_url)
+              profiles!inner(id, nome, avatar_url)
             )
           `)
           .eq('id', applicationId)
@@ -228,10 +248,11 @@ export default function CheckInHub() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const raw = appData as any
         setAppInfo({
-          freelancer_nome:   raw.freelancers?.profiles?.nome    ?? 'Freelancer',
-          freelancer_avatar: raw.freelancers?.profiles?.avatar_url ?? null,
-          job_titulo:        raw.jobs?.titulo    ?? '',
-          job_categoria:     raw.jobs?.categoria ?? null,
+          freelancer_nome:       raw.freelancers?.profiles?.nome       ?? 'Freelancer',
+          freelancer_avatar:     raw.freelancers?.profiles?.avatar_url ?? null,
+          freelancer_profile_id: raw.freelancers?.profiles?.id         ?? '',
+          job_titulo:            raw.jobs?.titulo    ?? '',
+          job_categoria:         raw.jobs?.categoria ?? null,
         })
 
         // Checkins + gera checkin se ainda não existe
@@ -295,6 +316,19 @@ export default function CheckInHub() {
 
   return (
     <div className="max-w-lg mx-auto space-y-6">
+
+      {/* Review modal triggered after checkout */}
+      {reviewId && appInfo && (
+        <ReviewModal
+          open={reviewOpen}
+          onClose={() => setReviewOpen(false)}
+          reviewId={reviewId}
+          avaliadoNome={appInfo.freelancer_nome}
+          avaliadoAvatar={appInfo.freelancer_avatar}
+          jobTitulo={appInfo.job_titulo}
+          onDone={() => setReviewOpen(false)}
+        />
+      )}
 
       {/* ── Botão voltar (desktop only — mobile tem TopBar) ── */}
       <button

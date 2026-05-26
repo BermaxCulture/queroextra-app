@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 import {
+  Avatar,
   Badge,
   Button,
   EmptyState,
@@ -21,7 +22,11 @@ import {
   GlassWater,
   Sparkles,
   ClipboardCheck,
+  ClipboardList,
 } from 'lucide-react'
+import { ReviewModal } from '@/components/ReviewModal/ReviewModal'
+import { usePendingReviews } from '@/hooks/useReviews'
+import type { PendingReview } from '@/hooks/useReviews'
 
 interface Application {
   id: string
@@ -46,13 +51,22 @@ interface Application {
 type TabStatus = 'pendente' | 'aprovado' | 'em_andamento' | 'concluido'
 
 export default function MeusExtrasPage() {
-  const { freelancer } = useAuth()
+  const { freelancer, profile } = useAuth()
   const { showToast } = useToast()
   const navigate = useNavigate()
-  
+
   const [activeTab, setActiveTab] = React.useState<TabStatus>('pendente')
   const [applications, setApplications] = React.useState<Application[]>([])
   const [loading, setLoading] = React.useState(true)
+
+  // Pending reviews
+  const { reviews: pendingReviews, refresh: refreshReviews } = usePendingReviews(profile?.id)
+  const [activeReview,    setActiveReview]    = React.useState<PendingReview | null>(null)
+  const [reviewModalOpen, setReviewModalOpen] = React.useState(false)
+
+  const openReview  = (rev: PendingReview) => { setActiveReview(rev); setReviewModalOpen(true) }
+  const closeReview = () => setReviewModalOpen(false)
+  const handleReviewDone = () => { setReviewModalOpen(false); refreshReviews() }
 
   // Carregar candidaturas baseado na aba ativa
   const fetchApplications = React.useCallback(async () => {
@@ -209,7 +223,62 @@ export default function MeusExtrasPage() {
         </div>
       </header>
 
+      {/* Review modal */}
+      {activeReview && (
+        <ReviewModal
+          open={reviewModalOpen}
+          onClose={closeReview}
+          reviewId={activeReview.id}
+          avaliadoNome={activeReview.avaliado_nome}
+          avaliadoAvatar={activeReview.avaliado_avatar}
+          jobTitulo={activeReview.job_titulo}
+          onDone={handleReviewDone}
+        />
+      )}
+
       <main className="max-w-6xl mx-auto px-4 md:px-8 mt-6 space-y-6">
+
+        {/* Avaliações pendentes */}
+        {pendingReviews.length > 0 && (
+          <div className="bg-white rounded-qe-md border border-qe-yellow/40 p-4 shadow-qe-sm space-y-3">
+            <div className="flex items-center gap-2">
+              <ClipboardList size={16} className="text-qe-yellow-text" />
+              <h3 className="text-[15px] font-bold text-qe-gray-900">
+                Avaliações Pendentes
+              </h3>
+              <span className="text-[11px] font-bold bg-qe-yellow/20 text-qe-yellow-text px-2 py-0.5 rounded-full">
+                {pendingReviews.length}
+              </span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {pendingReviews.map((rev) => {
+                const daysLeft = Math.max(0, Math.ceil(
+                  (new Date(rev.expires_at).getTime() - Date.now()) / 86_400_000
+                ))
+                return (
+                  <div
+                    key={rev.id}
+                    className="flex items-center justify-between gap-3 p-3 bg-qe-gray-50 rounded-qe-sm border border-qe-gray-100"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <Avatar size="sm" src={rev.avaliado_avatar ?? undefined} name={rev.avaliado_nome} />
+                      <div className="min-w-0">
+                        <div className="text-[13px] font-bold text-qe-gray-900 truncate">{rev.avaliado_nome}</div>
+                        <div className="text-[11px] text-qe-gray-400 truncate">
+                          {rev.job_titulo} · {daysLeft}d restante{daysLeft !== 1 ? 's' : ''}
+                        </div>
+                      </div>
+                    </div>
+                    <Button variant="primary" size="sm" onClick={() => openReview(rev)}>
+                      Avaliar
+                    </Button>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         <Tabs tabs={tabs} activeTab={activeTab} onChange={(v) => setActiveTab(v as TabStatus)} />
 
         {/* Listagem */}
