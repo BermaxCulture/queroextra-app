@@ -25,10 +25,9 @@ import {
   Briefcase,
   Calendar,
   Clock,
-  ClipboardList,
 } from 'lucide-react'
 import { ReviewModal } from '@/components/ReviewModal/ReviewModal'
-import { fetchPendingReviews, createPendingReview } from '@/hooks/useReviews'
+import { fetchPendingReviews } from '@/hooks/useReviews'
 import type { PendingReview } from '@/hooks/useReviews'
 
 // ---------------------------------------------------------------------------
