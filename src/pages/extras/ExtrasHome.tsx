@@ -92,7 +92,8 @@ export default function ExtrasHome() {
 
   const showBottomNav =
     !location.pathname.includes('/extras/vaga/') &&
-    !location.pathname.includes('/extras/checkin/')
+    !location.pathname.includes('/extras/checkin/') &&
+    !location.pathname.includes('/extras/freelancer/')
 
   return (
     <div className="min-h-screen bg-qe-bg-page lg:flex">
@@ -115,6 +116,7 @@ export default function ExtrasHome() {
           <Route path="checkin/:applicationId" element={<FreelancerCheckinPage />} />
           <Route path="carteira" element={<CarteiraPage />} />
           <Route path="perfil" element={<PerfilPage />} />
+          <Route path="freelancer/:id" element={<PerfilPage />} />
           <Route path="*" element={<Navigate to="explorar" replace />} />
         </Routes>
       </div>
