@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   ChevronRight,
+  Star,
 } from 'lucide-react'
 
 interface JobDetails {
@@ -28,6 +29,7 @@ interface JobDetails {
   descricao: string | null
   categoria: string | null
   tags: string[] | null
+  beneficios?: string[] | null // novos benefícios da vaga
   status: string
   urgente: boolean
   created_at: string
@@ -37,6 +39,7 @@ interface JobDetails {
       id: string
       nome: string
       avatar_url: string | null
+      avaliacao?: number // nota da empresa (0-5)
     }
   } | null
 }
@@ -49,7 +52,7 @@ export default function VagaDetalhesPage() {
 
   const [job, setJob] = React.useState<JobDetails | null>(null)
   const [loading, setLoading] = React.useState(true)
-  const [hasApplied, setHasApplied] = React.useState(false)
+  const [existingApp, setExistingApp] = React.useState<{ id: string; status: string } | null>(null)
   const [applying, setApplying] = React.useState(false)
 
   // Carregar dados da vaga e status de candidatura
@@ -57,29 +60,47 @@ export default function VagaDetalhesPage() {
     if (!id) return
     try {
       setLoading(true)
-      
+
       // Buscar detalhes do job
       const { data, error } = await supabase
         .from('jobs')
         .select('*, companies(id, profiles(id, nome, avatar_url))')
         .eq('id', id)
-        .single()
+        .maybeSingle()
 
       if (error) throw error
-      setJob(data as unknown as JobDetails)
+      const jobData = data as unknown as JobDetails
+
+      // Buscar média de avaliações da empresa
+      if (jobData?.companies?.profiles?.id) {
+        const { data: revs } = await supabase
+          .from('reviews')
+          .select('nota')
+          .eq('avaliado_id', jobData.companies.profiles.id)
+          .eq('status', 'enviada')
+
+        if (revs && revs.length > 0) {
+          const sum = revs.reduce((acc, r) => acc + r.nota, 0)
+          jobData.companies.profiles.avaliacao = parseFloat((sum / revs.length).toFixed(1))
+        } else {
+          jobData.companies.profiles.avaliacao = 0
+        }
+      }
+
+      setJob(jobData)
 
       // Se o freelancer estiver logado, verificar se ele já se candidatou
       if (freelancer?.id) {
         const { data: appData, error: appError } = await supabase
           .from('applications')
-          .select('id')
+          .select('id, status')
           .eq('job_id', id)
           .eq('freelancer_id', freelancer.id)
           .maybeSingle()
 
         if (appError) throw appError
         if (appData) {
-          setHasApplied(true)
+          setExistingApp(appData as { id: string; status: string })
         }
       }
     } catch (err: any) {
@@ -104,25 +125,35 @@ export default function VagaDetalhesPage() {
 
     try {
       setApplying(true)
-      const { error } = await supabase
-        .from('applications')
-        .insert({
-          job_id: id,
-          freelancer_id: freelancer.id,
-          status: 'pendente',
-        })
 
-      if (error) {
-        // Se a constraint de unique disparar
-        if (error.code === '23505') {
-          setHasApplied(true)
-          showToast('Você já se candidatou a esta vaga!', 'info')
-          return
+      if (existingApp && existingApp.status === 'cancelado') {
+        const { error } = await supabase
+          .from('applications')
+          .update({ status: 'pendente' })
+          .eq('id', existingApp.id)
+        if (error) throw error
+        setExistingApp({ ...existingApp, status: 'pendente' })
+      } else {
+        const { data, error } = await supabase
+          .from('applications')
+          .insert({
+            job_id: id,
+            freelancer_id: freelancer.id,
+            status: 'pendente',
+          })
+          .select('id, status')
+          .single()
+
+        if (error) {
+          if (error.code === '23505') {
+            showToast('Você já se candidatou a esta vaga!', 'info')
+            return
+          }
+          throw error
         }
-        throw error
+        setExistingApp(data)
       }
 
-      setHasApplied(true)
       showToast('Candidatura enviada com sucesso! ⚡', 'success')
     } catch (err: any) {
       const msg = err?.message || err?.details || (typeof err === 'object' ? JSON.stringify(err) : String(err))
@@ -168,6 +199,9 @@ export default function VagaDetalhesPage() {
   const dateFormatted = job.data_inicio
     ? new Date(job.data_inicio).toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' })
     : 'A definir'
+  const endDateFormatted = job.data_fim
+    ? new Date(job.data_fim).toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' })
+    : 'A definir'
 
   const timeFormatted = () => {
     if (!job.data_inicio) return 'A definir'
@@ -197,6 +231,47 @@ export default function VagaDetalhesPage() {
     </span>
   )
 
+  const renderApplyButton = (className: string) => {
+    if (existingApp && existingApp.status === 'rejeitado') {
+      return (
+        <Button
+          variant="secondary"
+          disabled
+          size="lg"
+          className={`bg-qe-error-bg text-qe-error border-none pointer-events-none font-bold ${className}`}
+        >
+          Candidatura Recusada ✗
+        </Button>
+      )
+    }
+    
+    if (existingApp && existingApp.status !== 'cancelado') {
+      const label = existingApp.status === 'aprovado' ? 'Candidatura aprovada ✓' : 'Candidatura enviada ✓'
+      return (
+        <Button
+          variant="secondary"
+          disabled
+          size="lg"
+          className={`bg-qe-gray-100 text-qe-gray-400 border-none pointer-events-none font-bold ${className}`}
+        >
+          {label}
+        </Button>
+      )
+    }
+
+    return (
+      <Button
+        variant="primary"
+        size="lg"
+        className={`shadow-qe-sm font-bold flex items-center justify-center gap-1.5 ${className}`}
+        onClick={handleApply}
+        loading={applying}
+      >
+        Quero Extra! ⚡
+      </Button>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-qe-bg-page flex flex-col pb-[80px]">
       {/* Header com Voltar */}
@@ -208,7 +283,7 @@ export default function VagaDetalhesPage() {
 
       {/* Conteúdo principal */}
       <main className="flex-1 px-4 md:px-8 py-6 max-w-6xl mx-auto w-full grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
-        
+
         {/* Coluna Esquerda: Informações Gerais */}
         <div className="md:col-span-8 space-y-6">
           {/* Info Principal */}
@@ -262,6 +337,9 @@ export default function VagaDetalhesPage() {
               <div className="text-[12px] text-qe-gray-400 mt-2 flex items-center gap-1">
                 <Calendar size={12} className="text-qe-gray-400" />
                 <span className="capitalize">{dateFormatted}</span>
+                {endDateFormatted && endDateFormatted !== dateFormatted && (
+                  <span className="capitalize ml-1">– {endDateFormatted}</span>
+                )}
               </div>
             </div>
           </section>
@@ -269,9 +347,15 @@ export default function VagaDetalhesPage() {
           {/* Detalhes do Extra (Descrição e requisitos) */}
           <section className="bg-white rounded-qe-md border border-qe-gray-200 p-5 space-y-4 shadow-qe-sm">
             <div>
-              <h2 className="text-[16px] font-bold text-qe-gray-900 mb-2">Detalhes do Extra</h2>
+              <h2 className="text-[16px] font-bold text-qe-gray-900 mb-2">Descrição do Extra</h2>
               <p className="text-[14px] text-qe-gray-600 leading-relaxed">
                 {job.descricao || 'Nenhuma descrição fornecida para este extra.'}
+              </p>
+            </div>
+            <div>
+              <h2 className="text-[16px] font-bold text-qe-gray-900 mb-2">Beneficios</h2>
+              <p className="text-[14px] text-qe-gray-600 leading-relaxed">
+                {job.beneficios || 'Nenhuma descrição fornecida para este extra.'}
               </p>
             </div>
 
@@ -311,6 +395,20 @@ export default function VagaDetalhesPage() {
                 <div className="flex items-center gap-1.5 mt-1">
                   <span className="text-[12px] text-qe-gray-400">Ver perfil da empresa</span>
                 </div>
+                <div className="flex items-center gap-1.5 mt-1">
+                  {job.companies?.profiles.avaliacao !== undefined && job.companies.profiles.avaliacao > 0 ? (
+                    <>
+                      <div className="flex items-center gap-0.5">
+                        {Array.from({ length: 5 }, (_, i) => (
+                          <Star key={i} size={12} className={i < Math.round(job.companies!.profiles.avaliacao!) ? "text-qe-yellow fill-current" : "text-qe-gray-300"} />
+                        ))}
+                      </div>
+                      <span className="text-[12px] font-bold text-qe-gray-700">{job.companies.profiles.avaliacao.toFixed(1)}</span>
+                    </>
+                  ) : (
+                    <span className="text-[12px] text-qe-gray-400">Novo na plataforma</span>
+                  )}
+                </div>
               </div>
             </div>
             <ChevronRight size={20} className="text-qe-gray-400" />
@@ -335,6 +433,9 @@ export default function VagaDetalhesPage() {
               <div className="flex items-center justify-between text-[13px] font-medium text-qe-gray-600">
                 <span className="text-qe-gray-400">Data do Turno</span>
                 <span className="font-semibold text-qe-gray-900 capitalize">{dateFormatted}</span>
+                {endDateFormatted && endDateFormatted !== dateFormatted && (
+                  <span className="font-semibold text-qe-gray-900 capitalize ml-2">– {endDateFormatted}</span>
+                )}
               </div>
               <div className="flex items-center justify-between text-[13px] font-medium text-qe-gray-600">
                 <span className="text-qe-gray-400">Horário</span>
@@ -346,26 +447,7 @@ export default function VagaDetalhesPage() {
               </div>
             </div>
 
-            {hasApplied ? (
-              <Button
-                variant="secondary"
-                disabled
-                size="lg"
-                className="w-full bg-qe-gray-100 text-qe-gray-400 border-none pointer-events-none font-bold"
-              >
-                Candidatura enviada ✓
-              </Button>
-            ) : (
-              <Button
-                variant="primary"
-                size="lg"
-                className="w-full shadow-qe-sm font-bold flex items-center justify-center gap-1.5"
-                onClick={handleApply}
-                loading={applying}
-              >
-                Quero Extra! ⚡
-              </Button>
-            )}
+            {renderApplyButton('w-full')}
           </div>
         </div>
 
@@ -379,28 +461,9 @@ export default function VagaDetalhesPage() {
             R$ {job.valor.toLocaleString('pt-BR')},00
           </div>
         </div>
-        
+
         <div className="shrink-0 w-3/5">
-          {hasApplied ? (
-            <Button
-              variant="secondary"
-              disabled
-              size="lg"
-              className="w-full bg-qe-gray-100 text-qe-gray-400 border-none pointer-events-none"
-            >
-              Candidatura enviada ✓
-            </Button>
-          ) : (
-            <Button
-              variant="primary"
-              size="lg"
-              className="w-full shadow-qe-sm"
-              onClick={handleApply}
-              loading={applying}
-            >
-              Quero Extra! ⚡
-            </Button>
-          )}
+          {renderApplyButton('w-full')}
         </div>
       </footer>
     </div>
