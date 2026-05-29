@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 import {
@@ -103,8 +103,11 @@ export default function VagasLista() {
   const { company } = useAuth()
   const { showToast } = useToast()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
 
-  const [activeTab, setActiveTab] = React.useState<TabType>('todas')
+  const [activeTab, setActiveTab] = React.useState<TabType>(
+    (searchParams.get('tab') as TabType) ?? 'todas'
+  )
   const [jobs, setJobs] = React.useState<Job[]>([])
   const [loading, setLoading] = React.useState(true)
 
