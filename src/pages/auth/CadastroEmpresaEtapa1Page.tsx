@@ -14,6 +14,7 @@ import {
   stripCnpjCpf,
 } from '@/lib/validators/cnpjCpf'
 import { validateImageFile } from '@/lib/validators/file'
+import { checkEmailAvailable } from '@/services/auth/checkEmailAvailable'
 
 const passwordSchema = z
   .string()
@@ -92,6 +93,13 @@ export default function CadastroEmpresaEtapa1Page() {
   const onSubmit = async (data: EmpresaEtapa1Form) => {
     setLoading(true)
     try {
+      // Verifica se o e-mail já está em uso antes de criar a conta
+      const emailDisponivel = await checkEmailAvailable(data.email)
+      if (!emailDisponivel) {
+        showToast('Este e-mail já está cadastrado. Tente fazer login ou use outro e-mail.', 'error')
+        return
+      }
+
       const metadata = {
         nome: data.nome,
         nome_empresa: data.nome,
