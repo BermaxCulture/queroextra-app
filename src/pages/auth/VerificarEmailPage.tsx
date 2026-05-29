@@ -93,14 +93,15 @@ export default function VerificarEmailPage() {
             <Mail size={24} className="text-qe-yellow" />
           </div>
           <p className="text-[14px] text-qe-gray-600 leading-relaxed">
-            Enviamos um código de 6 dígitos para
+            Enviamos um código de 8 dígitos para
             <br />
             <strong className="text-qe-black">{maskEmail(email)}</strong>
           </p>
         </div>
 
+        {/* quantidade de digitos  */}
         <InputOTP
-          length={6}
+          length={8}
           autoFocus
           disabled={loading}
           onComplete={handleVerify}
