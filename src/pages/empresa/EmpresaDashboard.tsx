@@ -113,7 +113,7 @@ export default function EmpresaDashboard() {
       // 1. Buscar TODAS as vagas da empresa (para calcular os KPIs de ativos e finalizados)
       const { data: allJobs, error: allJobsErr } = await supabase
         .from('jobs')
-        .select('id, status, applications(id)')
+        .select('id, status, applications(id, status)')
         .eq('company_id', company.id)
 
       if (allJobsErr) throw allJobsErr
@@ -125,7 +125,7 @@ export default function EmpresaDashboard() {
       const finishedJobsCount = allJobs.filter((j) => j.status === 'finalizada').length
       
       const totalCandidatesCount = allJobs.reduce(
-        (acc, j) => acc + (j.applications ? j.applications.length : 0),
+        (acc, j) => acc + (j.applications ? j.applications.filter((a: any) => a.status !== 'cancelado').length : 0),
         0
       )
 

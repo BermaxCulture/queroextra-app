@@ -24,16 +24,16 @@ import { Building2, Mail, FileText, LogOut, Eye, Pencil, Lock, EyeOff } from 'lu
 // ── Schemas ──────────────────────────────────────────────────────────────────
 
 const editSchema = z.object({
-  nome:     z.string().min(3, 'Nome deve ter pelo menos 3 caracteres'),
+  nome: z.string().min(3, 'Nome deve ter pelo menos 3 caracteres'),
   cnpj_cpf: z.string().min(14, 'Documento inválido').refine(isValidCnpjCpf, 'CNPJ ou CPF inválido'),
-  email:    z.string().email('E-mail inválido'),
-  area:     z.string().min(1, 'Selecione o segmento'),
+  email: z.string().email('E-mail inválido'),
+  area: z.string().min(1, 'Selecione o segmento'),
 })
 type EditFormData = z.infer<typeof editSchema>
 
 const passwordSchema = z
   .object({
-    newPassword:     z
+    newPassword: z
       .string()
       .min(8, 'Mínimo 8 caracteres')
       .regex(/[A-Z]/, 'Deve conter letra maiúscula')
@@ -44,7 +44,7 @@ const passwordSchema = z
   })
   .refine((d) => d.newPassword === d.confirmPassword, {
     message: 'As senhas não coincidem',
-    path:    ['confirmPassword'],
+    path: ['confirmPassword'],
   })
 type PasswordFormData = z.infer<typeof passwordSchema>
 
@@ -56,17 +56,17 @@ export default function EmpresaPerfil() {
   const { showToast } = useToast()
 
   // Sheet visibility
-  const [showEditSheet,     setShowEditSheet]     = React.useState(false)
+  const [showEditSheet, setShowEditSheet] = React.useState(false)
   const [showPasswordSheet, setShowPasswordSheet] = React.useState(false)
-  const [showLogoutSheet,   setShowLogoutSheet]   = React.useState(false)
+  const [showLogoutSheet, setShowLogoutSheet] = React.useState(false)
 
   // Loading states
-  const [saving,      setSaving]      = React.useState(false)
-  const [savingPass,  setSavingPass]  = React.useState(false)
-  const [loggingOut,  setLoggingOut]  = React.useState(false)
+  const [saving, setSaving] = React.useState(false)
+  const [savingPass, setSavingPass] = React.useState(false)
+  const [loggingOut, setLoggingOut] = React.useState(false)
 
   // Password visibility
-  const [showNew,     setShowNew]     = React.useState(false)
+  const [showNew, setShowNew] = React.useState(false)
   const [showConfirm, setShowConfirm] = React.useState(false)
 
   // Segmentos from DB
@@ -83,8 +83,8 @@ export default function EmpresaPerfil() {
   }, [])
 
   // Local overrides — updated optimistically after save (no full page reload)
-  const [localNome,    setLocalNome]    = React.useState(profile?.nome ?? '')
-  const [localArea,    setLocalArea]    = React.useState(company?.area ?? '')
+  const [localNome, setLocalNome] = React.useState(profile?.nome ?? '')
+  const [localArea, setLocalArea] = React.useState(company?.area ?? '')
   const [localCnpjCpf, setLocalCnpjCpf] = React.useState(
     company?.cnpj_cpf ? formatCnpjCpf(company.cnpj_cpf) : ''
   )
@@ -102,10 +102,10 @@ export default function EmpresaPerfil() {
   } = useForm<EditFormData>({
     resolver: zodResolver(editSchema),
     defaultValues: {
-      nome:     profile?.nome ?? '',
+      nome: profile?.nome ?? '',
       cnpj_cpf: company?.cnpj_cpf ? formatCnpjCpf(company.cnpj_cpf) : '',
-      email:    profile?.email ?? '',
-      area:     company?.area ?? '',
+      email: profile?.email ?? '',
+      area: company?.area ?? '',
     },
   })
 
@@ -115,10 +115,10 @@ export default function EmpresaPerfil() {
   React.useEffect(() => {
     if (showEditSheet) {
       resetEdit({
-        nome:     localNome,
+        nome: localNome,
         cnpj_cpf: localCnpjCpf,
-        email:    profile?.email ?? '',
-        area:     localArea,
+        email: profile?.email ?? '',
+        area: localArea,
       })
     }
   }, [showEditSheet])
@@ -302,7 +302,7 @@ export default function EmpresaPerfil() {
             variant="ghost"
             size="md"
             leadingIcon={<LogOut size={15} />}
-            className="text-qe-error hover:bg-qe-error-bg border-none"
+            className="text-red-600 hover:bg-qe-error-bg border-none"
             onClick={() => setShowLogoutSheet(true)}
           >
             Encerrar Sessão

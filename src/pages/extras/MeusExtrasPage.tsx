@@ -10,6 +10,7 @@ import {
   useToast,
   SkeletonCard,
   Tabs,
+  ResponsiveSheet,
 } from '@/components/ui'
 import type { TabItem } from '@/components/ui'
 import {
@@ -23,6 +24,7 @@ import {
   Sparkles,
   ClipboardCheck,
   ClipboardList,
+  Trash2,
 } from 'lucide-react'
 import { ReviewModal } from '@/components/ReviewModal/ReviewModal'
 import { usePendingReviews } from '@/hooks/useReviews'
@@ -40,6 +42,8 @@ interface Application {
     data_inicio: string | null
     data_fim: string | null
     categoria: string | null
+    descricao: string | null
+    beneficios: string | null
     companies: {
       profiles: {
         nome: string
@@ -68,6 +72,30 @@ export default function MeusExtrasPage() {
   const closeReview = () => setReviewModalOpen(false)
   const handleReviewDone = () => { setReviewModalOpen(false); refreshReviews() }
 
+  // Cancelar candidatura
+  const [cancellingId, setCancellingId] = React.useState<string | null>(null)
+  const [cancelTarget, setCancelTarget] = React.useState<string | null>(null)
+
+  const confirmCancelApplication = async () => {
+    if (!cancelTarget) return
+    try {
+      setCancellingId(cancelTarget)
+      const { error } = await supabase
+        .from('applications')
+        .update({ status: 'cancelado' })
+        .eq('id', cancelTarget)
+      if (error) throw error
+      setApplications((prev) => prev.filter((a) => a.id !== cancelTarget))
+      showToast('Candidatura removida com sucesso.', 'info')
+    } catch (err: any) {
+      const msg = err?.message || (typeof err === 'object' ? JSON.stringify(err) : String(err))
+      showToast(`Erro ao remover: ${msg}`, 'error')
+    } finally {
+      setCancellingId(null)
+      setCancelTarget(null)
+    }
+  }
+
   // Carregar candidaturas baseado na aba ativa
   const fetchApplications = React.useCallback(async () => {
     if (!freelancer?.id) return
@@ -87,6 +115,8 @@ export default function MeusExtrasPage() {
             data_inicio,
             data_fim,
             categoria,
+           descricao,
+           beneficios,
             companies (
               profiles (
                 nome
@@ -343,6 +373,24 @@ export default function MeusExtrasPage() {
                   </div>
                 </div>
 
+                {/* Descrição e Benefícios (apenas para finalizados) */}
+                {app.status === 'concluido' && (app.jobs?.descricao || app.jobs?.beneficios) && (
+                  <div className="mb-3 space-y-2">
+                    {app.jobs?.descricao && (
+                      <div className="bg-qe-gray-50 rounded-qe-sm px-3 py-2">
+                        <span className="text-[10px] font-bold text-qe-gray-400 uppercase tracking-[0.5px]">Descrição</span>
+                        <p className="text-[13px] text-qe-gray-600 mt-0.5 leading-snug line-clamp-2">{app.jobs.descricao}</p>
+                      </div>
+                    )}
+                    {app.jobs?.beneficios && (
+                      <div className="bg-qe-gray-50 rounded-qe-sm px-3 py-2">
+                        <span className="text-[10px] font-bold text-qe-gray-400 uppercase tracking-[0.5px]">Benefícios</span>
+                        <p className="text-[13px] text-qe-gray-600 mt-0.5 leading-snug line-clamp-2">{app.jobs.beneficios}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Rodapé do Card */}
                 <div className="flex items-center justify-between pt-3.5 border-t border-qe-gray-100">
                   <div>
@@ -374,6 +422,17 @@ export default function MeusExtrasPage() {
                       Ver Detalhes
                       <ChevronRight size={14} />
                     </Button>
+                    {app.status === 'pendente' && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="flex items-center gap-1 text-[13px] px-2.5 text-qe-error hover:bg-red-50 border-transparent"
+                        onClick={() => setCancelTarget(app.id)}
+                        loading={cancellingId === app.id}
+                      >
+                        <Trash2 size={14} />
+                      </Button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -381,6 +440,38 @@ export default function MeusExtrasPage() {
           </div>
         )}
       </main>
+
+      <ResponsiveSheet
+        open={!!cancelTarget}
+        onClose={() => !cancellingId && setCancelTarget(null)}
+        title="Deseja remover a candidatura?"
+      >
+        <div className="p-4 pb-8 space-y-4">
+          <p className="text-[14px] text-qe-gray-600 leading-relaxed">
+            Ao confirmar, sua candidatura para esta vaga será removida permanentemente.
+          </p>
+          <div className="flex gap-3">
+            <Button
+              variant="secondary"
+              size="md"
+              className="flex-1"
+              onClick={() => setCancelTarget(null)}
+              disabled={!!cancellingId}
+            >
+              Voltar
+            </Button>
+            <Button
+              variant="danger"
+              size="md"
+              className="flex-1"
+              loading={!!cancellingId}
+              onClick={confirmCancelApplication}
+            >
+              Remover
+            </Button>
+          </div>
+        </div>
+      </ResponsiveSheet>
     </div>
   )
 }

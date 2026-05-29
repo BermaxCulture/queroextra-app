@@ -20,6 +20,7 @@ import { Button, Input, useToast, Chip } from '@/components/ui'
 import { FREELANCER_HABILIDADES } from '@/constants/freelancerSkills'
 import { formatCpf, isValidCpf, stripCpf } from '@/lib/validators/cpf'
 import { formatPhone, isValidWhatsAppPhone, stripPhone } from '@/lib/validators/phone'
+import { checkEmailAvailable } from '@/services/auth/checkEmailAvailable'
 
 const passwordSchema = z
   .string()
@@ -115,6 +116,13 @@ export default function CadastroPage() {
   const onSubmit = async (data: FreelancerCadastroData) => {
     setLoading(true)
     try {
+      // Verifica se o e-mail já está em uso antes de criar a conta
+      const emailDisponivel = await checkEmailAvailable(data.email)
+      if (!emailDisponivel) {
+        showToast('Este e-mail já está cadastrado. Tente fazer login ou use outro e-mail.', 'error')
+        return
+      }
+
       const { error } = await supabase.auth.signUp({
         email: data.email,
         password: data.password,

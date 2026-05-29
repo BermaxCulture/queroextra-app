@@ -238,12 +238,16 @@ export default function FreelancerCheckinPage() {
         return
       }
 
-      showToast(
-        activePhase === 'checkin' ? 'Check-in confirmado!' : 'Check-out confirmado!',
-        'success',
-      )
-      await fetchCheckins()
-      resetOtp()
+        // After successful confirmation, update application status
+        const newStatus = activePhase === 'checkin' ? 'em_andamento' : 'concluido';
+        const { error: statusError } = await supabase
+          .from('applications')
+          .update({ status: newStatus })
+          .eq('id', applicationId);
+        if (statusError) {
+          console.error('Erro ao atualizar status da aplicação:', statusError);
+          showToast('Erro ao atualizar status da aplicação.', 'error');
+        }
     } catch {
       setCodeError('Erro ao validar. Tente novamente.')
       resetOtp()
