@@ -23,7 +23,7 @@ export const JobCard: React.FC<JobCardProps> = ({
   <motion.article
     className={[
       'bg-qe-white rounded-qe-md border border-qe-gray-200 overflow-hidden cursor-pointer',
-      isUrgent ? 'border-t-[3px] border-t-qe-error' : '',
+      isUrgent ? 'border-t-[3px] border-t-qe-navy' : '',
     ].join(' ')}
     whileHover={{ y: -2, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}
     transition={{ duration: 0.15 }}

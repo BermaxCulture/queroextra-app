@@ -128,8 +128,9 @@ export default function LoginPage() {
           <p className="text-qe-gray-500 mt-2 font-medium">Acesse sua conta para continuar</p>
         </div>
 
-        <div className="w-full bg-white rounded-[24px] p-8 shadow-qe-lg border border-qe-gray-100">
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+        <div className="w-full bg-white rounded-[24px] shadow-qe-lg border border-qe-gray-100 overflow-hidden">
+          <div className="h-1.5 bg-qe-navy" />
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 p-8">
             <Input
               label="E-mail"
               placeholder="seu@email.com"
@@ -188,7 +189,7 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          <div className="mt-8 pt-6 border-t border-qe-gray-100 text-center">
+          <div className="mt-8 pt-6 border-t border-qe-gray-100 text-center px-8 pb-8">
             <p className="text-caption text-qe-gray-500">
               Não tem uma conta?{' '}
               <Link

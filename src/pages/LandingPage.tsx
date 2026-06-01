@@ -618,7 +618,7 @@ export default function LandingPage() {
             </h2>
 
             {/* Subtitle */}
-            <p className="text-[16px] mb-10 leading-relaxed font-sans" style={{ color: 'var(--qe-gray-400)' }}>
+            <p className="text-[16px] mb-10 leading-relaxed font-sans text-white/80">
               Mais de 2.400 profissionais e 340 empresas
               <br className="hidden sm:block" />
               já estão na plataforma.

@@ -533,7 +533,7 @@ export default function EmpresaDashboard() {
 
                         {/* Badge de candidatos pendentes */}
                         {pendingCount > 0 && (
-                          <Badge variant="warning">
+                          <Badge variant="urgent">
                             {pendingCount} {pendingCount === 1 ? 'CANDIDATO' : 'CANDIDATOS'}
                           </Badge>
                         )}
@@ -571,7 +571,7 @@ export default function EmpresaDashboard() {
                   <ClipboardList size={16} className="text-qe-yellow-text" />
                   <h3 className="text-[15px] font-bold text-qe-gray-900">Avaliações Pendentes</h3>
                 </div>
-                <span className="text-[11px] font-bold bg-qe-yellow/20 text-qe-yellow-text px-2 py-0.5 rounded-full">
+                <span className="text-[11px] font-bold bg-qe-navy/10 text-qe-navy px-2 py-0.5 rounded-full">
                   {pendingReviews.length}
                 </span>
               </div>
@@ -676,7 +676,7 @@ export default function EmpresaDashboard() {
             <div className="absolute right-[-15px] top-[-15px] w-24 h-24 bg-white/5 rounded-full blur-xl pointer-events-none" />
             
             <div className="space-y-1">
-              <span className="text-[10px] font-bold tracking-[1px] uppercase text-qe-yellow bg-qe-yellow/10 px-2 py-0.5 rounded-qe-xs w-max">
+              <span className="text-[10px] font-bold tracking-[1px] uppercase text-white bg-white/20 px-2 py-0.5 rounded-qe-xs w-max">
                 Urgência ⚡
               </span>
               <h3 className="text-[16px] font-bold pt-1.5">Precisa de alguém hoje?</h3>

@@ -25,7 +25,7 @@ export default {
         'qe-error-bg': '#FDECEA',
         'qe-warning': '#E07B00',
         'qe-warning-bg': '#FFF3E0',
-        'qe-navy': '#1A2332',
+        'qe-navy': '#EA1D2C',
       },
       fontFamily: {
         sans: ['DM Sans', 'sans-serif'],
