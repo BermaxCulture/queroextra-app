@@ -261,7 +261,7 @@ export default function ParaFreelancers() {
             className="bg-qe-navy py-3 sm:py-12 px-4"
           >
             <div className="max-w-4xl mx-auto flex flex-row justify-around items-center">
-              <StatItem value={2400} suffix="+" label="Freelancers" isInView={statsInView} />
+              <StatItem value={2400} suffix="+" label="Freelancers / Prestadores" isInView={statsInView} />
               <div className="w-px h-8 sm:h-10 bg-qe-gray-700" />
               <StatItem value={340} suffix="+" label="Empresas" isInView={statsInView} />
               <div className="w-px h-8 sm:h-10 bg-qe-gray-700" />

@@ -379,7 +379,7 @@ export default function EmpresaDashboard() {
         jobId: job.id,
         jobTitle: job.titulo,
         freelancerId: app.freelancers?.id,
-        name: app.freelancers?.profiles?.nome || 'Freelancer',
+        name: app.freelancers?.profiles?.nome || 'Prestador',
         avatar: app.freelancers?.profiles?.avatar_url,
         celular: app.freelancers?.profiles?.celular,
       }))

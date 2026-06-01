@@ -304,7 +304,7 @@ export default function LandingPage() {
             style={{ backgroundColor: 'var(--qe-navy)' }}
           >
             <div className="max-w-4xl mx-auto flex flex-row justify-around items-center">
-              <StatItem value={2400} suffix="+" label="Freelancers" isInView={statsInView} />
+              <StatItem value={2400} suffix="+" label="Freelancers / Prestadores" isInView={statsInView} />
               <div className="w-px h-8 sm:h-10" style={{ backgroundColor: 'var(--qe-gray-700)' }} />
               <StatItem value={340} suffix="+" label="Empresas" isInView={statsInView} />
               <div className="w-px h-8 sm:h-10" style={{ backgroundColor: 'var(--qe-gray-700)' }} />

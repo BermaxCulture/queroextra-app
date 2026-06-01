@@ -248,7 +248,7 @@ export default function CheckInHub() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const raw = appData as any
         setAppInfo({
-          freelancer_nome:       raw.freelancers?.profiles?.nome       ?? 'Freelancer',
+          freelancer_nome:       raw.freelancers?.profiles?.nome       ?? 'Prestador',
           freelancer_avatar:     raw.freelancers?.profiles?.avatar_url ?? null,
           freelancer_profile_id: raw.freelancers?.profiles?.id         ?? '',
           job_titulo:            raw.jobs?.titulo    ?? '',
