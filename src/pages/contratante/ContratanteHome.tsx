@@ -2,7 +2,7 @@ import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-
 import { useAuth } from '@/contexts/AuthContext'
 import { BottomNav, TopBar, Button, Sidebar } from '@/components/ui'
 import type { SidebarItem } from '@/components/ui'
-import { Plus, LayoutGrid, Wallet, User, Briefcase, Users } from 'lucide-react'
+import { LayoutGrid, Wallet, User, Briefcase, Users } from 'lucide-react'
 import EmpresaDashboard from '../empresa/EmpresaDashboard'
 import NovaVaga from '../empresa/NovaVaga'
 import Candidatos from '../empresa/Candidatos'
