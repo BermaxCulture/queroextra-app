@@ -97,17 +97,6 @@ export default function ContratanteHome() {
     location.pathname.includes('/perfil-publico') ||
     /\/empresa\/vagas\/.+/.test(location.pathname)
 
-  const sidebarFooter = (
-    <Button
-      variant="primary"
-      size="sm"
-      className="w-full font-bold flex items-center justify-center gap-1.5"
-      onClick={() => navigate('/empresa/nova-vaga')}
-    >
-      <Plus size={16} /> Nova Vaga
-    </Button>
-  )
-
   const activeItemPath = location.pathname.startsWith('/empresa/vagas')
     ? '/empresa/vagas'
     : location.pathname
@@ -120,7 +109,6 @@ export default function ContratanteHome() {
         activeItem={activeItemPath}
         onChange={(path) => navigate(path)}
         role="empresa"
-        footer={sidebarFooter}
       />
 
       {/* COLUNA PRINCIPAL */}
