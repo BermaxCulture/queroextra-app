@@ -347,13 +347,13 @@ export default function VagaDetalhesPage() {
           <section className="bg-white rounded-qe-md border border-qe-gray-200 p-5 space-y-4 shadow-qe-sm">
             <div>
               <h2 className="text-[16px] font-bold text-qe-gray-900 mb-2">Descrição do Extra</h2>
-              <p className="text-[14px] text-qe-gray-600 leading-relaxed">
+              <p className="text-[14px] text-qe-gray-600 leading-relaxed break-words">
                 {job.descricao || 'Nenhuma descrição fornecida para este extra.'}
               </p>
             </div>
             <div>
               <h2 className="text-[16px] font-bold text-qe-gray-900 mb-2">Beneficios</h2>
-              <p className="text-[14px] text-qe-gray-600 leading-relaxed">
+              <p className="text-[14px] text-qe-gray-600 leading-relaxed break-words">
                 {job.beneficios || 'Nenhuma descrição fornecida para este extra.'}
               </p>
             </div>
