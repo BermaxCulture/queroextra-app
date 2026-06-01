@@ -55,7 +55,7 @@ export function LandingHeader() {
                 : 'font-medium text-qe-gray-500 hover:text-qe-gray-900'
             }`}
           >
-            Para Freelancers
+            Para Freelancers / Prestadores
           </Link>
           <Link
             to="/para-empresas"
@@ -116,7 +116,7 @@ export function LandingHeader() {
               }`}
               onClick={closeMenu}
             >
-              Para Freelancers
+              Para Freelancers / Prestadores
             </Link>
             <Link
               to="/para-empresas"
