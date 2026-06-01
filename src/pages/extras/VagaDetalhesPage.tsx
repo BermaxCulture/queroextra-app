@@ -55,66 +55,65 @@ export default function VagaDetalhesPage() {
   const [existingApp, setExistingApp] = React.useState<{ id: string; status: string } | null>(null)
   const [applying, setApplying] = React.useState(false)
 
-  // Carregar dados da vaga e status de candidatura
-  const loadJobDetails = React.useCallback(async () => {
+  // Buscar dados públicos da vaga (independente de auth)
+  React.useEffect(() => {
     if (!id) return
-    try {
-      setLoading(true)
-
-      // Buscar detalhes do job
-      const { data, error } = await supabase
-        .from('jobs')
-        .select('*, companies(id, profiles(id, nome, avatar_url))')
-        .eq('id', id)
-        .maybeSingle()
-
-      if (error) throw error
-      const jobData = data as unknown as JobDetails
-
-      // Buscar média de avaliações da empresa
-      if (jobData?.companies?.profiles?.id) {
-        const { data: revs } = await supabase
-          .from('reviews')
-          .select('nota')
-          .eq('avaliado_id', jobData.companies.profiles.id)
-          .eq('status', 'enviada')
-
-        if (revs && revs.length > 0) {
-          const sum = revs.reduce((acc, r) => acc + r.nota, 0)
-          jobData.companies.profiles.avaliacao = parseFloat((sum / revs.length).toFixed(1))
-        } else {
-          jobData.companies.profiles.avaliacao = 0
-        }
-      }
-
-      setJob(jobData)
-
-      // Se o freelancer estiver logado, verificar se ele já se candidatou
-      if (freelancer?.id) {
-        const { data: appData, error: appError } = await supabase
-          .from('applications')
-          .select('id, status')
-          .eq('job_id', id)
-          .eq('freelancer_id', freelancer.id)
+    const fetchJob = async () => {
+      try {
+        setLoading(true)
+        const { data, error } = await supabase
+          .from('jobs')
+          .select('*, companies(id, profiles(id, nome, avatar_url))')
+          .eq('id', id)
           .maybeSingle()
 
-        if (appError) throw appError
-        if (appData) {
-          setExistingApp(appData as { id: string; status: string })
-        }
-      }
-    } catch (err: any) {
-      const msg = err?.message || err?.details || (typeof err === 'object' ? JSON.stringify(err) : String(err))
-      console.error('Erro detalhado ao carregar detalhes da vaga:', err)
-      showToast(`Erro ao carregar vaga: ${msg}`, 'error')
-    } finally {
-      setLoading(false)
-    }
-  }, [id, freelancer, showToast])
+        if (error) throw error
+        const jobData = data as unknown as JobDetails
 
+        if (jobData?.companies?.profiles?.id) {
+          const { data: revs } = await supabase
+            .from('reviews')
+            .select('nota')
+            .eq('avaliado_id', jobData.companies.profiles.id)
+            .eq('status', 'enviada')
+
+          if (revs && revs.length > 0) {
+            const sum = revs.reduce((acc, r) => acc + r.nota, 0)
+            jobData.companies.profiles.avaliacao = parseFloat((sum / revs.length).toFixed(1))
+          } else {
+            jobData.companies.profiles.avaliacao = 0
+          }
+        }
+
+        setJob(jobData)
+      } catch (err: any) {
+        const msg = err?.message || err?.details || (typeof err === 'object' ? JSON.stringify(err) : String(err))
+        console.error('Erro ao carregar detalhes da vaga:', err)
+        showToast(`Erro ao carregar vaga: ${msg}`, 'error')
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchJob()
+  }, [id, showToast])
+
+  // Verificar candidatura existente (só quando freelancer estiver disponível)
   React.useEffect(() => {
-    loadJobDetails()
-  }, [loadJobDetails])
+    if (!id || !freelancer?.id) return
+    const checkApp = async () => {
+      const { data: appData, error: appError } = await supabase
+        .from('applications')
+        .select('id, status')
+        .eq('job_id', id)
+        .eq('freelancer_id', freelancer.id)
+        .maybeSingle()
+
+      if (!appError && appData) {
+        setExistingApp(appData as { id: string; status: string })
+      }
+    }
+    checkApp()
+  }, [id, freelancer?.id])
 
   // Enviar Candidatura
   const handleApply = async () => {
