@@ -5,6 +5,46 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+function emailAprovado(nome: string, jobTitulo: string, companyNome: string): string {
+  return `
+    <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:32px 24px;color:#1A1A1A">
+      <h2 style="color:#1A1A1A;margin-bottom:8px">Parabéns, ${nome}! 🎉</h2>
+      <p style="color:#444;line-height:1.6">
+        Sua candidatura para a vaga <strong>${jobTitulo}</strong> na empresa
+        <strong>${companyNome}</strong> foi <strong style="color:#1A9E5C">aprovada</strong>.
+      </p>
+      <p style="color:#444;line-height:1.6">
+        A empresa entrará em contato com você em breve com mais detalhes sobre o turno.
+        Fique atento ao seu celular!
+      </p>
+      <hr style="border:none;border-top:1px solid #E5E5E5;margin:24px 0"/>
+      <p style="color:#999;font-size:13px">
+        Quero Extra — A plataforma de trabalho extra para o food service.
+      </p>
+    </div>
+  `
+}
+
+function emailRejeitado(nome: string, jobTitulo: string, companyNome: string): string {
+  return `
+    <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:32px 24px;color:#1A1A1A">
+      <h2 style="color:#1A1A1A;margin-bottom:8px">Olá, ${nome}</h2>
+      <p style="color:#444;line-height:1.6">
+        Infelizmente sua candidatura para a vaga <strong>${jobTitulo}</strong> na empresa
+        <strong>${companyNome}</strong> não foi selecionada desta vez.
+      </p>
+      <p style="color:#444;line-height:1.6">
+        Não desanime! Existem muitas outras oportunidades disponíveis na plataforma.
+        Continue explorando e se candidatando às vagas que combinam com o seu perfil.
+      </p>
+      <hr style="border:none;border-top:1px solid #E5E5E5;margin:24px 0"/>
+      <p style="color:#999;font-size:13px">
+        Quero Extra — A plataforma de trabalho extra para o food service.
+      </p>
+    </div>
+  `
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -57,8 +97,9 @@ Deno.serve(async (req) => {
     }
 
     const freelancerProfile = (application.freelancers as any)?.profiles
-    const jobTitulo = (application.jobs as any)?.titulo ?? 'vaga'
-    const companyNome = (application.jobs as any)?.companies?.profiles?.nome ?? 'empresa'
+    const jobTitulo         = (application.jobs as any)?.titulo ?? 'vaga'
+    const companyNome       = (application.jobs as any)?.companies?.profiles?.nome ?? 'empresa'
+    const nome              = freelancerProfile?.nome ?? 'Prestador'
 
     // Notificação in-app
     if (freelancerProfile?.id) {
@@ -72,10 +113,17 @@ Deno.serve(async (req) => {
       })
     }
 
-    // E-mail via Resend (templates do dashboard)
+    // E-mail via Resend com HTML hardcoded
     if (resendKey && freelancerProfile?.email) {
-      const TEMPLATE_APROVADO  = '55b0380d-bab9-4065-b402-78ab10a733c1'
-      const TEMPLATE_REJEITADO = 'd7b73001-c164-442e-a600-77133879545c'
+      const subject =
+        action === 'aprovado'
+          ? `✅ Candidatura aprovada — ${jobTitulo}`
+          : `Resultado da sua candidatura — ${jobTitulo}`
+
+      const html =
+        action === 'aprovado'
+          ? emailAprovado(nome, jobTitulo, companyNome)
+          : emailRejeitado(nome, jobTitulo, companyNome)
 
       const emailRes = await fetch('https://api.resend.com/emails', {
         method: 'POST',
@@ -86,19 +134,14 @@ Deno.serve(async (req) => {
         body: JSON.stringify({
           from: fromEmail,
           to: [freelancerProfile.email],
-          template_id: action === 'aprovado' ? TEMPLATE_APROVADO : TEMPLATE_REJEITADO,
-          variables: {
-            nome:        freelancerProfile.nome,
-            jobTitulo:   jobTitulo,
-            companyNome: companyNome,
-          },
+          subject,
+          html,
         }),
       })
 
       if (!emailRes.ok) {
         const body = await emailRes.text()
         console.error(`[notify-application] Resend error: ${body}`)
-        // Falha no e-mail não interrompe o fluxo — notificação in-app já foi criada
       }
     }
 
