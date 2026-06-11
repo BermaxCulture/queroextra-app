@@ -25,7 +25,9 @@ export interface Freelancer {
   profile_id: string
   cpf: string | null
   habilidades: string[] | null
-  stripe_account_id: string | null
+  validapay_onboarding_status: 'em_analise' | 'aprovado' | null
+  validapay_form_id: string | null
+  validapay_account_number: string | null
 }
 
 interface AuthContextType {
