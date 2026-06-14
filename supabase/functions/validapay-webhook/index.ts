@@ -21,35 +21,35 @@ serve(async (req) => {
     console.log('Webhook recebido da ValidaPay:', JSON.stringify(payload, null, 2))
 
     // 1. Aprovação de Subconta (account_approved)
-    if (payload.event === 'account_approved' && payload.status === 'CONFIRMED') {
-      const formId = payload.formId
-      const accountNumber = payload.account?.account
+    if (payload.event === 'account_approved') {
+      const accountNumber = payload.account?.account;
+      const documentNumber = payload.documentNumber;
 
-      if (!formId || !accountNumber) {
-        throw new Error('Payload inválido: formId ou account.account ausente')
+      if (!accountNumber || !documentNumber) {
+        throw new Error('Payload inválido: account.account ou documentNumber ausente');
       }
 
-      // Atualiza o freelancer correspondente
+      // Atualiza o freelancer pelo CPF (documentNumber)
       const { data, error } = await supabaseClient
         .from('freelancers')
         .update({
           validapay_onboarding_status: 'aprovado',
-          validapay_account_number: accountNumber
+          validapay_account_number: accountNumber,
         })
-        .eq('validapay_form_id', formId)
-        .select()
+        .eq('cpf', documentNumber)
+        .select();
 
       if (error) {
-        console.error('Erro ao atualizar freelancer:', error)
-        throw error
+        console.error('Erro ao atualizar freelancer:', error);
+        throw error;
       }
 
-      console.log(`Freelancer aprovado! formId: ${formId}, Conta: ${accountNumber}`)
-      
+      console.log(`Freelancer aprovado! CPF: ${documentNumber}, Conta: ${accountNumber}`);
+
       return new Response(JSON.stringify({ message: 'Webhook account_approved processado com sucesso' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
-      })
+      });
     }
 
     // 2. Confirmação de Pagamento PIX (charge.paid)
