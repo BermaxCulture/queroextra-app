@@ -17,6 +17,7 @@ ALTER TABLE freelancers ADD COLUMN IF NOT EXISTS ocupacao text;
 ALTER TABLE freelancers ADD COLUMN IF NOT EXISTS faixa_patrimonio text;
 ALTER TABLE freelancers ADD COLUMN IF NOT EXISTS validapay_form_id text;
 ALTER TABLE freelancers ADD COLUMN IF NOT EXISTS validapay_account_number text;
+ALTER TABLE freelancers ADD COLUMN IF NOT EXISTS validapay_url_documentscopy text;
 ALTER TABLE freelancers ADD COLUMN IF NOT EXISTS validapay_onboarding_status text CHECK (validapay_onboarding_status IN ('em_analise', 'aprovado', 'rejeitado'));
 
 -- Transactions

@@ -158,6 +158,12 @@ Deno.serve(async (req) => {
       urlDocumentscopy = statusData?.proposalStatus?.urlDocumentscopy ?? null
     }
 
+    if (urlDocumentscopy) {
+      await supabase.from('freelancers').update({
+        validapay_url_documentscopy: urlDocumentscopy,
+      }).eq('id', freelancer.id)
+    }
+
     return json({
       ok: true,
       formId: proposal.formId,

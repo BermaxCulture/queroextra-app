@@ -92,7 +92,53 @@ serve(async (req) => {
         status: 200,
       })
     }
+    // 3. Recebimento de Link de Documentos (onboarding.documentscopy)
+    if (payload.event === 'onboarding.documentscopy' && payload.data?.status === 'PENDING') {
+      const url = payload.data.url
+      const formId = payload.data.proposalId
 
+      if (url && formId) {
+        const { error } = await supabaseClient
+          .from('freelancers')
+          .update({ validapay_url_documentscopy: url })
+          .eq('validapay_form_id', formId)
+
+        if (error) {
+          console.error('Erro ao salvar URL de documentos:', error)
+          throw error
+        }
+        console.log(`URL de documentos salva para formId: ${formId}`)
+        return new Response(JSON.stringify({ message: 'Webhook documentscopy processado com sucesso' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        })
+      }
+    }
+
+    // 4. Conta Criada (payload final sem event)
+    if (!payload.event && payload.formId && payload.accountNumber) {
+      const formId = payload.formId
+      const accountNumber = payload.accountNumber
+
+      const { error } = await supabaseClient
+        .from('freelancers')
+        .update({
+          validapay_onboarding_status: 'aprovado',
+          validapay_account_number: accountNumber
+        })
+        .eq('validapay_form_id', formId)
+
+      if (error) {
+        console.error('Erro ao aprovar conta final:', error)
+        throw error
+      }
+      
+      console.log(`Conta final aprovada! formId: ${formId}, Conta: ${accountNumber}`)
+      return new Response(JSON.stringify({ message: 'Webhook de conta criada processado com sucesso' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      })
+    }
     // Retorno padrão para eventos não mapeados ou não suportados ainda
     return new Response(JSON.stringify({ message: 'Evento recebido, mas nenhuma ação mapeada foi executada' }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

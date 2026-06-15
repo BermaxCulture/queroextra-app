@@ -49,8 +49,8 @@ const financialSchema = z.object({
   if (pix_key_type === 'cpf' && !/^\d{3}\.\d{3}\.\d{3}-\d{2}$|^\d{11}$/.test(pix_key)) {
     ctx.addIssue({ code: 'custom', path: ['pix_key'], message: 'CPF inválido' })
   }
-  if (pix_key_type === 'telefone' && !/^\+55\d{10,11}$/.test(pix_key)) {
-    ctx.addIssue({ code: 'custom', path: ['pix_key'], message: 'Use o formato +55XXXXXXXXXXX' })
+  if (pix_key_type === 'telefone' && !/^\(\d{2}\) \d{4,5}-\d{4}$/.test(pix_key)) {
+    ctx.addIssue({ code: 'custom', path: ['pix_key'], message: 'Telefone inválido. Ex: (11) 99999-9999' })
   }
   if (pix_key_type === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(pix_key)) {
     ctx.addIssue({ code: 'custom', path: ['pix_key'], message: 'E-mail inválido' })
@@ -69,32 +69,53 @@ type FinancialData = z.infer<typeof financialSchema>
 // ─── Select options ──────────────────────────────────────────────────────────
 
 const RENDA_OPTIONS = [
-  { value: '1DINP01', label: 'Até R$ 1.500/mês' },
-  { value: '1DINP02', label: 'R$ 1.500 a R$ 3.000/mês' },
-  { value: '1DINP03', label: 'R$ 3.000 a R$ 5.000/mês' },
-  { value: '1DINP04', label: 'R$ 5.000 a R$ 10.000/mês' },
-  { value: '1DINP05', label: 'Acima de R$ 10.000/mês' },
+  { value: 'DINP01', label: 'Até R$ 5.000' },
+  { value: 'DINP02', label: 'R$ 5.001 a R$ 10.000' },
+  { value: 'DINP03', label: 'R$ 10.001 a R$ 30.000' },
+  { value: 'DINP04', label: 'R$ 30.001 a R$ 100.000' },
+  { value: 'DINP05', label: 'Acima de R$ 100.000' },
 ]
 
 const OCUPACAO_OPTIONS = [
-  { value: 'ONP01', label: 'Assalariado(a) CLT' },
-  { value: 'ONP02', label: 'Autônomo(a)' },
-  { value: 'ONP03', label: 'Profissional Liberal' },
-  { value: 'ONP04', label: 'Empresário(a)' },
-  { value: 'ONP05', label: 'Servidor(a) Público(a)' },
-  { value: 'ONP06', label: 'Aposentado(a) / Pensionista' },
-  { value: 'ONP07', label: 'Trabalhador(a) Rural' },
-  { value: 'ONP08', label: 'Microempreendedor(a) Individual (MEI)' },
-  { value: 'ONP09', label: 'Estudante' },
-  { value: 'ONP10', label: 'Outros' },
+  { value: 'ONP01', label: 'Administrador / Gerente' },
+  { value: 'ONP02', label: 'Vendedor / Representante Comercial' },
+  { value: 'ONP03', label: 'Analista de RH / Assistente de Pessoal' },
+  { value: 'ONP04', label: 'Analista Financeiro / Contador' },
+  { value: 'ONP05', label: 'Desenvolvedor / Analista de Sistemas' },
+  { value: 'ONP06', label: 'Profissional de Marketing / Publicitário' },
+  { value: 'ONP07', label: 'Médico / Dentista / Enfermeiro' },
+  { value: 'ONP08', label: 'Professor / Educador' },
+  { value: 'ONP09', label: 'Engenheiro (em qualquer área)' },
+  { value: 'ONP10', label: 'Advogado / Jurista' },
+  { value: 'ONP11', label: 'Auxiliar de Serviços Gerais / Faxineiro' },
+  { value: 'ONP12', label: 'Pedreiro / Servente / Mestre de Obras' },
+  { value: 'ONP13', label: 'Motorista / Entregador / Logístico' },
+  { value: 'ONP14', label: 'Recepcionista / Operador de Caixa' },
+  { value: 'ONP15', label: 'Técnico (Eletricidade, Mecânica, etc.)' },
+  { value: 'ONP16', label: 'Designer Gráfico / Artista' },
+  { value: 'ONP17', label: 'Operador de Máquinas / Montador' },
+  { value: 'ONP18', label: 'Consultor / Autônomo' },
+  { value: 'ONP19', label: 'Cabeleireiro / Manicure / Esteticista' },
+  { value: 'ONP20', label: 'Vigilante / Agente de Segurança' },
+  { value: 'ONP21', label: 'Trabalhador Agropecuário / Agrônomo' },
+  { value: 'ONP22', label: 'Agente de Viagens / Hoteleiro' },
+  { value: 'ONP23', label: 'Jornalista / Relações Públicas' },
+  { value: 'ONP24', label: 'Psicólogo / Terapeuta' },
+  { value: 'ONP25', label: 'Servidor Público' },
+  { value: 'ONP26', label: 'Pesquisador / Cientista' },
+  { value: 'ONP27', label: 'Artesão / MEI' },
+  { value: 'ONP28', label: 'Aposentado / Reformado' },
+  { value: 'ONP29', label: 'Estudante (Sem Renda Própria)' },
+  { value: 'ONP30', label: 'Autônomo' },
+  { value: 'ONP31', label: 'Outros' },
 ]
 
 const PATRIMONIO_OPTIONS = [
-  { value: 'NWNP01', label: 'Até R$ 5.000' },
-  { value: 'NWNP02', label: 'R$ 5.000 a R$ 20.000' },
-  { value: 'NWNP03', label: 'R$ 20.000 a R$ 100.000' },
-  { value: 'NWNP04', label: 'R$ 100.000 a R$ 300.000' },
-  { value: 'NWNP05', label: 'Acima de R$ 300.000' },
+  { value: 'NWNP01', label: 'Até R$ 50.000' },
+  { value: 'NWNP02', label: 'R$ 50.001 a R$ 200.000' },
+  { value: 'NWNP03', label: 'R$ 200.001 a R$ 1.000.000' },
+  { value: 'NWNP04', label: 'R$ 1.000.001 a R$ 5.000.000' },
+  { value: 'NWNP05', label: 'Acima de R$ 5.000.000' },
 ]
 
 const PIX_KEY_TYPES = [
@@ -106,9 +127,17 @@ const PIX_KEY_TYPES = [
 
 const PIX_PLACEHOLDERS: Record<string, string> = {
   cpf: '000.000.000-00',
-  telefone: '+5511999999999',
+  telefone: '(11) 99999-9999',
   email: 'seuemail@email.com',
   chave_aleatoria: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
+}
+
+function applyPhoneMask(value: string): string {
+  const d = value.replace(/\D/g, '').slice(0, 11)
+  if (d.length <= 2) return d.length ? `(${d}` : ''
+  if (d.length <= 6) return `(${d.slice(0, 2)}) ${d.slice(2)}`
+  if (d.length <= 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`
+  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`
 }
 
 const ESTADOS_BR = [
@@ -292,6 +321,13 @@ function StepFinanceiro({
     setValue('pix_key', '', { shouldValidate: false })
   }
 
+  const handlePixKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = pixKeyType === 'telefone'
+      ? applyPhoneMask(e.target.value)
+      : e.target.value
+    setValue('pix_key', val, { shouldValidate: false })
+  }
+
   return (
     <form onSubmit={handleSubmit(onNext)} className="space-y-4">
       <div className="text-center mb-1">
@@ -370,7 +406,9 @@ function StepFinanceiro({
           <Input
             label="Chave PIX"
             placeholder={PIX_PLACEHOLDERS[pixKeyType] ?? ''}
+            inputMode={pixKeyType === 'telefone' ? 'numeric' : undefined}
             {...register('pix_key')}
+            onChange={handlePixKeyChange}
             errorMessage={errors.pix_key?.message}
           />
         </div>
@@ -442,16 +480,17 @@ function StepKyc({
           Enviar documentos
         </a>
       ) : (
-        <p className="text-[12px] text-qe-gray-400 bg-qe-gray-50 rounded-qe-md p-3">
-          Link de documentos não disponível. Entre em contato com o suporte.
+        <p className="text-[12px] text-qe-gray-500 bg-qe-yellow-subtle/50 border border-qe-yellow/20 rounded-qe-md p-3">
+          Estamos processando seu cadastro. O link para envio dos documentos será gerado em instantes.<br/><br/>
+          Você pode fechar esta tela. Assim que o link estiver pronto, um card de Validação Pendente aparecerá no canto da tela!
         </p>
       )}
 
       <button
         onClick={onClose}
-        className="text-[13px] text-qe-gray-400 hover:text-qe-gray-600 transition-colors"
+        className="text-[13px] font-medium text-qe-gray-400 hover:text-qe-gray-600 transition-colors"
       >
-        Fazer isso depois
+        Fechar e aguardar
       </button>
     </div>
   )
@@ -505,6 +544,56 @@ function OnboardingMiniBadge({ onExpand }: { onExpand: () => void }) {
   )
 }
 
+// ─── Mini badge flutuante para KYC (em_analise) ──────────────────────────────
+
+function KycMiniBadge({ urlDocumentscopy }: { urlDocumentscopy: string | null }) {
+  const [dismissed, setDismissed] = useState(false)
+
+  if (dismissed || !urlDocumentscopy) return null
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0, y: 20, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 20, scale: 0.95 }}
+        transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+        className="fixed bottom-20 right-4 z-[9997] lg:bottom-6"
+      >
+        <div className="bg-qe-white rounded-qe-lg shadow-qe-lg border border-qe-gray-200 w-[260px] overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 bg-qe-yellow">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 size={16} className="text-qe-black" />
+              <span className="text-[13px] font-bold text-qe-black">Validação Pendente</span>
+            </div>
+            <button
+              onClick={() => setDismissed(true)}
+              className="text-qe-black/50 hover:text-qe-black transition-colors"
+              aria-label="Fechar"
+            >
+              <X size={15} />
+            </button>
+          </div>
+          <div className="px-4 py-3 space-y-3">
+            <p className="text-[12px] text-qe-gray-500 leading-snug">
+              Envie seus documentos para aprovar sua conta e receber por vagas.
+            </p>
+            <a
+              href={urlDocumentscopy}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-between w-full text-[13px] font-semibold text-qe-black hover:text-qe-yellow-text transition-colors"
+            >
+              <span>Enviar documentos</span>
+              <ExternalLink size={16} />
+            </a>
+          </div>
+        </div>
+      </motion.div>
+    </AnimatePresence>
+  )
+}
+
 // ─── Componente principal exportável ─────────────────────────────────────────
 
 export default function OnboardingModal() {
@@ -516,13 +605,13 @@ export default function OnboardingModal() {
   const [submitting, setSubmitting] = useState(false)
   const { showToast } = useToast()
 
-  // Não renderiza nada se o onboarding já foi iniciado ou aprovado
-  if (
-    !freelancer ||
-    freelancer.validapay_onboarding_status === 'aprovado' ||
-    freelancer.validapay_onboarding_status === 'em_analise'
-  ) {
+  // Não renderiza nada se o onboarding já foi aprovado
+  if (!freelancer || freelancer.validapay_onboarding_status === 'aprovado') {
     return null
+  }
+
+  if (freelancer.validapay_onboarding_status === 'em_analise') {
+    return <KycMiniBadge urlDocumentscopy={freelancer.validapay_url_documentscopy ?? null} />
   }
 
   const handleClose = () => setOpen(false)
@@ -537,8 +626,13 @@ export default function OnboardingModal() {
     if (!addressData) return
     setSubmitting(true)
     try {
+      // Normaliza telefone para formato E.164 (+55XXXXXXXXXXX) antes de enviar
+      const pixKey = data.pix_key_type === 'telefone'
+        ? `+55${data.pix_key.replace(/\D/g, '')}`
+        : data.pix_key
+
       const { data: result, error } = await supabase.functions.invoke('create-subaccount', {
-        body: { ...addressData, ...data },
+        body: { ...addressData, ...data, pix_key: pixKey },
       })
 
       if (error) throw error
