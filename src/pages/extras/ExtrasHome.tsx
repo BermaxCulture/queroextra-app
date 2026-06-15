@@ -13,6 +13,7 @@ import MeusExtrasPage from './MeusExtrasPage'
 import PerfilPage from './PerfilPage'
 import EmpresaPerfilPage from './EmpresaPerfilPage'
 import FreelancerCheckinPage from './FreelancerCheckinPage'
+import OnboardingModal from './OnboardingPage'
 
 const freelancerSidebarItems: SidebarItem[] = [
   { value: 'explorar', label: 'Explorar', icon: <Compass size={20} /> },
@@ -104,6 +105,9 @@ export default function ExtrasHome() {
         onChange={handleTabChange}
         role="freelancer"
       />
+
+      {/* Modal de onboarding — aparece sobre o conteúdo se status for null */}
+      <OnboardingModal />
 
       {/* Conteúdo principal */}
       <div className="flex-1 min-w-0">

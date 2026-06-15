@@ -25,7 +25,10 @@ import {
   Briefcase,
   Calendar,
   Clock,
+  Copy,
+  QrCode,
 } from 'lucide-react'
+import { QRCodeSVG } from 'qrcode.react'
 import { ReviewModal } from '@/components/ReviewModal/ReviewModal'
 import { fetchPendingReviews } from '@/hooks/useReviews'
 import type { PendingReview } from '@/hooks/useReviews'
@@ -202,6 +205,21 @@ export function CandidatosTab({
   const [rejectTarget, setRejectTarget] = React.useState<{
     appId: string; nome: string
   } | null>(null)
+
+  // PIX State
+  const [pixData, setPixData] = React.useState<{ chargeId: string; emv: string } | null>(null)
+  const [pixStatus, setPixStatus] = React.useState<'PENDING' | 'PAID' | 'EXPIRED'>('PENDING')
+  const [pollingTimeout, setPollingTimeout] = React.useState<NodeJS.Timeout | null>(null)
+
+  // Limpa polling ao desmontar ou fechar
+  React.useEffect(() => {
+    if (!isApproveOpen && pollingTimeout) {
+      clearTimeout(pollingTimeout)
+      setPollingTimeout(null)
+      setPixData(null)
+      setPixStatus('PENDING')
+    }
+  }, [isApproveOpen, pollingTimeout])
 
   // Sheet Perfil
   const [isProfileOpen, setIsProfileOpen] = React.useState(false)
@@ -381,27 +399,82 @@ export function CandidatosTab({
     if (!approveTarget) return
     try {
       setIsActionLoading(true)
-      const { error } = await supabase
-        .from('applications')
-        .update({ status: 'aprovado' })
-        .eq('id', approveTarget.appId)
-      if (error) throw error
-      await notify(approveTarget.appId, 'aprovado')
-      showToast(`${approveTarget.nome} aprovado com sucesso!`, 'success')
-      setIsApproveOpen(false)
-      // Redireciona para aba aprovados com highlight
-      setSearchParams(
-        (prev) => {
-          prev.set(tabParamName, 'aprovado')
-          prev.set('highlight', approveTarget.appId)
-          return prev
-        },
-        { replace: true }
+      
+      // 1. Gera a cobrança com split
+      const { data: chargeData, error: chargeErr } = await supabase.functions.invoke(
+        'create-pix-charge',
+        { body: { application_id: approveTarget.appId } }
       )
-    } catch {
-      showToast('Erro ao aprovar candidato.', 'error')
+
+      if (chargeErr || !chargeData?.emv) {
+        throw new Error(chargeErr?.message || chargeData?.error || 'Erro ao gerar PIX')
+      }
+
+      setPixData({ chargeId: chargeData.chargeId, emv: chargeData.emv })
+      setPixStatus('PENDING')
+      startPixPolling(chargeData.chargeId, approveTarget.appId)
+
+    } catch (err: any) {
+      console.error(err)
+      showToast(err.message || 'Erro ao aprovar candidato e gerar PIX.', 'error')
     } finally {
       setIsActionLoading(false)
+    }
+  }
+
+  const startPixPolling = (chargeId: string, appId: string) => {
+    const poll = async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke('get-charge-status', {
+          body: { chargeId }
+        })
+        
+        if (data?.status === 'PAID') {
+          setPixStatus('PAID')
+          showToast('Pagamento confirmado! Candidato aprovado.', 'success')
+          
+          // O webhook charge.paid atualizará a transação no backend.
+          // Aqui no frontend, nós assumimos que a vaga já foi confirmada,
+          // Então atualizamos a application pra 'aprovado' otimisticamente
+          await supabase.from('applications').update({ status: 'aprovado' }).eq('id', appId)
+          await notify(appId, 'aprovado')
+
+          setTimeout(() => {
+            setIsApproveOpen(false)
+            setSearchParams(
+              (prev) => {
+                prev.set(tabParamName, 'aprovado')
+                prev.set('highlight', appId)
+                return prev
+              },
+              { replace: true }
+            )
+            fetchApplications()
+          }, 1500)
+          return
+        }
+
+        if (data?.status === 'EXPIRED') {
+          setPixStatus('EXPIRED')
+          showToast('A cobrança PIX expirou.', 'error')
+          return
+        }
+
+        // Continua polling se a aba estiver aberta
+        setPollingTimeout(setTimeout(poll, 5000))
+      } catch (err) {
+        console.error('Erro no polling:', err)
+        setPollingTimeout(setTimeout(poll, 5000))
+      }
+    }
+    
+    poll()
+  }
+
+  const copyPix = () => {
+    if (pixData?.emv) {
+      navigator.clipboard.writeText(pixData.emv)
+      showToast('Código PIX copiado!', 'success')
     }
   }
 
@@ -721,14 +794,54 @@ export function CandidatosTab({
             <Phone size={13} className="text-qe-yellow-text shrink-0" />
             O número de contato será liberado após a confirmação.
           </div>
-          <div className="flex items-center gap-3 justify-end pt-3 border-t border-qe-gray-100">
-            <Button variant="ghost" size="sm" onClick={() => setIsApproveOpen(false)} disabled={isActionLoading}>
-              Cancelar
-            </Button>
-            <Button variant="primary" size="sm" onClick={handleApprove} loading={isActionLoading}>
-              Confirmar Aprovação
-            </Button>
-          </div>
+
+          {!pixData ? (
+            <div className="flex items-center gap-3 justify-end pt-3 border-t border-qe-gray-100">
+              <Button variant="ghost" size="sm" onClick={() => setIsApproveOpen(false)} disabled={isActionLoading}>
+                Cancelar
+              </Button>
+              <Button variant="primary" size="sm" onClick={handleApprove} loading={isActionLoading}>
+                Gerar Cobrança PIX
+              </Button>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-4 py-4 animate-in fade-in zoom-in duration-300">
+              {pixStatus === 'PAID' ? (
+                <div className="flex flex-col items-center gap-2 text-qe-success text-center">
+                  <div className="w-16 h-16 rounded-full bg-qe-success-bg flex items-center justify-center">
+                    <Check size={32} />
+                  </div>
+                  <h3 className="font-bold text-[18px]">Pagamento Aprovado!</h3>
+                  <p className="text-[13px]">Aguarde, redirecionando...</p>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2 text-qe-gray-700">
+                    <QrCode size={18} className="text-qe-yellow" />
+                    <span className="font-bold">Escaneie para pagar</span>
+                  </div>
+                  
+                  <div className="p-3 bg-white rounded-xl shadow-sm border border-qe-gray-200">
+                    <QRCodeSVG value={pixData.emv} size={200} />
+                  </div>
+                  
+                  <p className="text-[13px] text-qe-gray-500 text-center max-w-[280px]">
+                    Após o pagamento, esta tela atualizará automaticamente em instantes.
+                  </p>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full mt-2"
+                    leadingIcon={<Copy size={16} />}
+                    onClick={copyPix}
+                  >
+                    Copiar código Pix (Copia e Cola)
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </ResponsiveSheet>
 
