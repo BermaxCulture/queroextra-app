@@ -40,6 +40,27 @@ const financialSchema = z.object({
   ocupacao: z.string().min(1, 'Selecione sua ocupação'),
   faixa_patrimonio: z.string().min(1, 'Selecione sua faixa patrimonial'),
   pessoa_politicamente_exposta: z.boolean().optional(),
+  pix_key_type: z.enum(['cpf', 'telefone', 'email', 'chave_aleatoria'], {
+    required_error: 'Selecione o tipo de chave PIX',
+  }),
+  pix_key: z.string().min(1, 'Informe sua chave PIX'),
+}).superRefine((data, ctx) => {
+  const { pix_key_type, pix_key } = data
+  if (pix_key_type === 'cpf' && !/^\d{3}\.\d{3}\.\d{3}-\d{2}$|^\d{11}$/.test(pix_key)) {
+    ctx.addIssue({ code: 'custom', path: ['pix_key'], message: 'CPF inválido' })
+  }
+  if (pix_key_type === 'telefone' && !/^\+55\d{10,11}$/.test(pix_key)) {
+    ctx.addIssue({ code: 'custom', path: ['pix_key'], message: 'Use o formato +55XXXXXXXXXXX' })
+  }
+  if (pix_key_type === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(pix_key)) {
+    ctx.addIssue({ code: 'custom', path: ['pix_key'], message: 'E-mail inválido' })
+  }
+  if (
+    pix_key_type === 'chave_aleatoria' &&
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pix_key)
+  ) {
+    ctx.addIssue({ code: 'custom', path: ['pix_key'], message: 'Chave aleatória inválida (formato UUID)' })
+  }
 })
 
 type AddressData = z.infer<typeof addressSchema>
@@ -75,6 +96,20 @@ const PATRIMONIO_OPTIONS = [
   { value: 'NWNP04', label: 'R$ 100.000 a R$ 300.000' },
   { value: 'NWNP05', label: 'Acima de R$ 300.000' },
 ]
+
+const PIX_KEY_TYPES = [
+  { value: 'cpf', label: 'CPF' },
+  { value: 'telefone', label: 'Telefone' },
+  { value: 'email', label: 'E-mail' },
+  { value: 'chave_aleatoria', label: 'Chave aleatória' },
+]
+
+const PIX_PLACEHOLDERS: Record<string, string> = {
+  cpf: '000.000.000-00',
+  telefone: '+5511999999999',
+  email: 'seuemail@email.com',
+  chave_aleatoria: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
+}
 
 const ESTADOS_BR = [
   'AC','AL','AP','AM','BA','CE','DF','ES','GO','MA',
@@ -216,7 +251,7 @@ function StepEndereco({ onNext }: { onNext: (data: AddressData) => void }) {
   )
 }
 
-// ─── Step 2: Dados Pessoais + Financeiros ────────────────────────────────────
+// ─── Step 2: Dados financeiros + Chave PIX ───────────────────────────────────
 
 function StepFinanceiro({
   onNext,
@@ -235,13 +270,14 @@ function StepFinanceiro({
     formState: { errors },
   } = useForm<FinancialData>({
     resolver: zodResolver(financialSchema),
-    defaultValues: { pessoa_politicamente_exposta: false },
+    defaultValues: { pessoa_politicamente_exposta: false, pix_key_type: 'cpf' },
   })
 
   const faixaRenda = watch('faixa_renda') ?? ''
   const ocupacao = watch('ocupacao') ?? ''
   const faixaPatrimonio = watch('faixa_patrimonio') ?? ''
   const ppe = watch('pessoa_politicamente_exposta') ?? false
+  const pixKeyType = watch('pix_key_type') ?? 'cpf'
 
   const handleNascimentoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value.replace(/\D/g, '').slice(0, 8)
@@ -251,13 +287,18 @@ function StepFinanceiro({
     setValue('data_nascimento', formatted, { shouldValidate: raw.length === 8 })
   }
 
+  const handlePixTypeChange = (val: string) => {
+    setValue('pix_key_type', val as FinancialData['pix_key_type'], { shouldValidate: false })
+    setValue('pix_key', '', { shouldValidate: false })
+  }
+
   return (
     <form onSubmit={handleSubmit(onNext)} className="space-y-4">
       <div className="text-center mb-1">
         <div className="inline-flex items-center justify-center w-11 h-11 rounded-full bg-qe-yellow-subtle mb-3">
           <User size={22} className="text-qe-yellow-text" />
         </div>
-        <h2 className="text-[18px] font-bold text-qe-gray-900">Dados pessoais</h2>
+        <h2 className="text-[18px] font-bold text-qe-gray-900">Dados e chave PIX</h2>
         <p className="text-[12px] text-qe-gray-400 mt-1">
           Exigidos pela regulamentação financeira
         </p>
@@ -314,6 +355,30 @@ function StepFinanceiro({
         </span>
       </label>
 
+      {/* Separador visual */}
+      <div className="border-t border-qe-gray-100 pt-3">
+        <p className="text-[12px] font-semibold text-qe-gray-500 mb-3 uppercase tracking-wide">
+          Chave PIX para recebimento
+        </p>
+        <Select
+          label="Tipo de chave PIX"
+          options={PIX_KEY_TYPES}
+          value={pixKeyType}
+          onChange={handlePixTypeChange}
+        />
+        <div className="mt-3">
+          <Input
+            label="Chave PIX"
+            placeholder={PIX_PLACEHOLDERS[pixKeyType] ?? ''}
+            {...register('pix_key')}
+            errorMessage={errors.pix_key?.message}
+          />
+        </div>
+        <p className="text-[11px] text-qe-gray-400 mt-2 leading-snug">
+          Você receberá seus pagamentos nesta chave após cada serviço concluído.
+        </p>
+      </div>
+
       <div className="flex gap-3">
         <Button
           type="button"
@@ -362,7 +427,7 @@ function StepKyc({
       <div className="bg-qe-gray-50 border border-qe-gray-200 rounded-qe-md p-4 text-left flex items-start gap-2">
         <Clock size={15} className="text-qe-gray-400 shrink-0 mt-0.5" />
         <p className="text-[12px] text-qe-gray-500 leading-relaxed">
-          Após o envio, a aprovação pode levar até 24h. Você terá acesso completo assim que sua conta for aprovada.
+          Após o envio, a aprovação pode levar até 24h. Você poderá se candidatar a vagas assim que sua conta for aprovada.
         </p>
       </div>
 
@@ -409,7 +474,6 @@ function OnboardingMiniBadge({ onExpand }: { onExpand: () => void }) {
         className="fixed bottom-20 right-4 z-[9997] lg:bottom-6"
       >
         <div className="bg-qe-white rounded-qe-lg shadow-qe-lg border border-qe-gray-200 w-[260px] overflow-hidden">
-          {/* Header do mini badge */}
           <div className="flex items-center justify-between px-4 py-3 bg-qe-yellow">
             <div className="flex items-center gap-2">
               <AlertCircle size={16} className="text-qe-black" />
@@ -423,7 +487,6 @@ function OnboardingMiniBadge({ onExpand }: { onExpand: () => void }) {
               <X size={15} />
             </button>
           </div>
-          {/* Body */}
           <div className="px-4 py-3 space-y-3">
             <p className="text-[12px] text-qe-gray-500 leading-snug">
               Configure sua conta de repasse para receber por vagas.
@@ -446,16 +509,14 @@ function OnboardingMiniBadge({ onExpand }: { onExpand: () => void }) {
 
 export default function OnboardingModal() {
   const { freelancer, refreshFreelancer } = useAuth()
-  const [open, setOpen] = useState(
-    freelancer?.validapay_onboarding_status === null
-  )
+  const [open, setOpen] = useState(freelancer?.validapay_onboarding_status === null)
   const [step, setStep] = useState(1)
   const [addressData, setAddressData] = useState<AddressData | null>(null)
   const [urlDocumentscopy, setUrlDocumentscopy] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const { showToast } = useToast()
 
-  // Não renderiza nada se o onboarding já foi concluído ou está em análise
+  // Não renderiza nada se o onboarding já foi iniciado ou aprovado
   if (
     !freelancer ||
     freelancer.validapay_onboarding_status === 'aprovado' ||
@@ -465,9 +526,7 @@ export default function OnboardingModal() {
   }
 
   const handleClose = () => setOpen(false)
-  const handleExpand = () => {
-    setOpen(true)
-  }
+  const handleExpand = () => setOpen(true)
 
   const handleAddressNext = (data: AddressData) => {
     setAddressData(data)
@@ -489,8 +548,7 @@ export default function OnboardingModal() {
       await refreshFreelancer()
       setStep(3)
     } catch (err: any) {
-      const msg = err?.message ?? 'Erro desconhecido'
-      showToast(`Não foi possível criar sua conta: ${msg}`, 'error')
+      showToast(`Não foi possível criar sua conta: ${err?.message ?? 'Erro desconhecido'}`, 'error')
     } finally {
       setSubmitting(false)
     }
@@ -514,7 +572,6 @@ export default function OnboardingModal() {
         )}
       </Modal>
 
-      {/* Mini badge quando modal está fechado */}
       {!open && <OnboardingMiniBadge onExpand={handleExpand} />}
     </>
   )

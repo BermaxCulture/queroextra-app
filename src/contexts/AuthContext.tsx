@@ -28,6 +28,8 @@ export interface Freelancer {
   validapay_onboarding_status: 'em_analise' | 'aprovado' | null
   validapay_form_id: string | null
   validapay_account_number: string | null
+  pix_key: string | null
+  pix_key_type: 'cpf' | 'telefone' | 'email' | 'chave_aleatoria' | null
 }
 
 interface AuthContextType {

@@ -235,7 +235,7 @@ export default function VagaDetalhesPage() {
   )
 
   const renderApplyButton = (className: string) => {
-    // Bloqueia candidatura se o onboarding ainda não foi aprovado (UX — RLS faz o bloqueio real)
+    // Bloqueia candidatura se onboarding não aprovado (UX — RLS faz o bloqueio real no banco)
     if (!freelancer?.validapay_onboarding_status || freelancer.validapay_onboarding_status !== 'aprovado') {
       const isPending = freelancer?.validapay_onboarding_status === 'em_analise'
       return (

@@ -1,6 +1,6 @@
 # Sprint 2 — Integração Valida Pay
 **Período:** 2026-06-11 (Qua) a 2026-06-18 (Qua)
-**Objetivo:** Pagamento via PIX com split automático funcionando end-to-end — freelancer tem subconta Valida Pay aprovada, empresa paga ao aprovar candidato, plataforma retém R$10, freelancer recebe na subconta e saca manualmente após checkout confirmado.
+**Objetivo:** Pagamento via PIX com modelo de custódia (escrow) funcionando end-to-end — empresa paga ao aprovar candidato com split automático (R$10 master + valor líquido para subconta do freelancer), dinheiro fica retido na subconta sob controle exclusivo da master, e somente após checkout confirmado a master libera o saque via Valida Pay direto para a chave PIX do freelancer.
 
 ---
 
@@ -16,86 +16,102 @@
 - `POST {{auth_url}}/auth/token` — OAuth2 `client_credentials` → Bearer token
 
 **O que implementar:**
-- Edge Function `validapay-client/index.ts` com:
-  - `getValidaPayToken()` — busca token via `client_credentials`, cacheia em memória por duração do token
-  - `validaPayFetch(path, options, subAccountNumber?)` — injeta `Authorization: Bearer <token>` e opcionalmente `X-Sub-Account` header
-- Variáveis de ambiente a configurar no Supabase Dashboard (sandbox):
+- Módulo `supabase/functions/_shared/validapay.ts` ✅ (já deployado):
+  - `getValidaPayToken()` — busca token via `client_credentials`, cacheia em memória com margem de 60s
+  - `validaPayFetch(path, options, subAccountNumber?)` — injeta `Authorization: Bearer` e opcionalmente `X-Sub-Account`
+- Variáveis de ambiente (Supabase Dashboard — sandbox):
   - `VALIDAPAY_BASE_URL`
   - `VALIDAPAY_AUTH_URL`
   - `VALIDAPAY_CLIENT_ID`
   - `VALIDAPAY_CLIENT_SECRET`
-- Escopos necessários para a sprint inteira: `pix.cob/write pix.cob/read wallet/write wallet/read proposals/write subaccounts/read`
-
-**Triggers/migrations necessários:** Nenhum
+- Escopos necessários: `pix.cob/write pix.cob/read wallet/write wallet/read proposals/write proposals/read subaccounts/read`
 
 **Critérios de aceite:**
-- [ ] `getValidaPayToken()` retorna token válido no sandbox
-- [ ] `validaPayFetch()` retorna `401` corretamente se credenciais inválidas
-- [ ] Nenhuma credencial exposta no frontend — tudo server-side via Edge Functions
-- [ ] Variáveis de ambiente configuradas no projeto Supabase
+- [x] `getValidaPayToken()` retorna token válido no sandbox
+- [x] `validaPayFetch()` retorna `401` corretamente se credenciais inválidas
+- [x] Zero credenciais no frontend — tudo server-side
 
-**Estimativa:** P
-**Prioridade:** Alta
+**Estimativa:** P — **CONCLUÍDO**
 
 ---
 
-### US-02 — Onboarding do freelancer: coletar dados e criar subconta Valida Pay
+### US-02 — Onboarding do freelancer: criar subconta Valida Pay + coletar chave PIX
 
-**Como** freelancer, **quero** completar meu onboarding financeiro ao fazer primeiro login **para** poder receber pagamentos via split na plataforma.
+**Como** freelancer, **quero** completar meu onboarding financeiro ao fazer primeiro login **para** ter uma subconta Valida Pay aprovada e poder receber pagamentos pela plataforma.
 
 **Endpoints Valida Pay utilizados:**
 - `POST {{base_url}}/v1/proposals` — cria proposta de subconta PF com dados do freelancer
+- `GET {{base_url}}/v1/proposals/:formId` — consulta status e obtém `urlDocumentscopy`
 
 **O que implementar:**
 
-**Frontend:**
-- Verificação de onboarding ao logar: se `freelancers.validapay_onboarding_status IS NULL`, redirecionar para `/onboarding`
-- Tela `/onboarding` com formulário em etapas:
-  - **Etapa 1 — Endereço:** CEP (com auto-complete via ViaCEP), rua, número, complemento, bairro, cidade, estado
-  - **Etapa 2 — Dados financeiros:** faixa de renda (dropdown), ocupação (dropdown), faixa de patrimônio (dropdown) — mapear para os códigos da Valida Pay (`1DINP02`, `ONP07`, etc.)
-  - **Etapa 3 — Verificação de identidade:** exibir botão "Verificar minha identidade" que abre `urlDocumentscopy` em nova aba + instrução "Após completar a verificação, volte aqui"
-  - Botão "Já completei a verificação" → polling do status
-- Estado visual do onboarding: `pendente` → `em_analise` → `aprovado` / `rejeitado`
+**Frontend — Modal de onboarding em 3 etapas** (abre automaticamente se `validapay_onboarding_status === null`):
+- **Etapa 1 — Endereço:** CEP com auto-fill via ViaCEP, rua, número, complemento, bairro, cidade, estado
+- **Etapa 2 — Dados e chave PIX:**
+  - Data de nascimento, nome da mãe
+  - Faixa de renda (dropdown com códigos Valida Pay: `1DINP01`–`1DINP05`)
+  - Ocupação (dropdown: `ONP01`–`ONP10`)
+  - Faixa patrimonial (dropdown: `NWNP01`–`NWNP04`)
+  - Checkbox Pessoa Politicamente Exposta
+  - **Chave PIX:** tipo (CPF/Telefone/E-mail/Chave aleatória) + valor com validação por regex
+- **Etapa 3 — KYC:** exibe botão "Enviar documentos" que abre `urlDocumentscopy` em nova aba
+- Mini badge flutuante no canto inferior direito quando modal está fechado (enquanto `validapay_onboarding_status === null`)
+- Não renderiza se `validapay_onboarding_status === 'aprovado'` ou `'em_analise'`
 
-**Backend:**
-- Edge Function `create-subaccount/index.ts`:
-  - Recebe dados do formulário + `freelancer_id`
-  - Salva endereço e dados financeiros no banco (ver migration)
-  - Chama `POST /v1/proposals` com todos os dados
-  - Salva `validapay_form_id` e `validapay_onboarding_status = 'em_analise'` em `freelancers`
-  - Retorna `urlDocumentscopy` para o frontend exibir o botão de KYC
+**Backend — Edge Function `create-subaccount/index.ts`** ✅ (já deployada):
+- JWT auth — freelancer identificado pelo token (`auth.uid()`), nunca por campo no body
+- Valida: freelancer existe, tem CPF, não está já aprovado
+- Salva endereço em `profiles`, dados financeiros + `pix_key` + `pix_key_type` em `freelancers`
+- Chama `POST /v1/proposals` com todos os dados
+- Busca `GET /v1/proposals/:formId` para obter `urlDocumentscopy`
+- Salva `validapay_form_id` e `validapay_onboarding_status = 'em_analise'`
+- Retorna `{ ok: true, formId, urlDocumentscopy }`
+
+**Por que coletar chave PIX no onboarding?**
+A Valida Pay não permite que a master envie PIX diretamente para um CPF externo — só é possível sacar de uma subconta para uma chave PIX de mesma titularidade. A chave PIX coletada aqui será usada pela Edge Function `release-payment` no checkout, que chama `POST /v1/wallet/withdraw` com `accountId: validapay_account_number` + `pixKey: pix_key`.
 
 **Triggers/migrations necessários:**
 ```sql
--- Dados de endereço no perfil
-ALTER TABLE profiles ADD COLUMN cep text;
-ALTER TABLE profiles ADD COLUMN rua text;
-ALTER TABLE profiles ADD COLUMN numero text;
-ALTER TABLE profiles ADD COLUMN complemento text;
-ALTER TABLE profiles ADD COLUMN bairro text;
-ALTER TABLE profiles ADD COLUMN cidade text;
-ALTER TABLE profiles ADD COLUMN estado text;
+-- Endereço no perfil
+ALTER TABLE profiles
+  ADD COLUMN cep text,
+  ADD COLUMN rua text,
+  ADD COLUMN numero text,
+  ADD COLUMN complemento text,
+  ADD COLUMN bairro text,
+  ADD COLUMN cidade text,
+  ADD COLUMN estado text;
 
--- Dados financeiros e status Valida Pay no freelancer
-ALTER TABLE freelancers ADD COLUMN faixa_renda text;
-ALTER TABLE freelancers ADD COLUMN ocupacao text;
-ALTER TABLE freelancers ADD COLUMN faixa_patrimonio text;
-ALTER TABLE freelancers ADD COLUMN validapay_form_id text;
-ALTER TABLE freelancers ADD COLUMN validapay_account_number text;
-ALTER TABLE freelancers ADD COLUMN validapay_onboarding_status text
-  CHECK (validapay_onboarding_status IN ('em_analise', 'aprovado', 'rejeitado'));
+-- Dados financeiros + subconta + chave PIX no freelancer
+ALTER TABLE freelancers
+  ADD COLUMN faixa_renda text,
+  ADD COLUMN ocupacao text,
+  ADD COLUMN faixa_patrimonio text,
+  ADD COLUMN nome_mae text,
+  ADD COLUMN data_nascimento text,
+  ADD COLUMN validapay_form_id text,
+  ADD COLUMN validapay_account_number text,
+  ADD COLUMN validapay_onboarding_status text
+    CHECK (validapay_onboarding_status IN ('em_analise', 'aprovado', 'rejeitado')),
+  ADD COLUMN pix_key text,
+  ADD COLUMN pix_key_type text
+    CHECK (pix_key_type IN ('cpf', 'telefone', 'email', 'chave_aleatoria'));
+
+-- RLS: bloqueia candidatura sem subconta aprovada
+-- (Adicionar à policy de INSERT em applications)
 ```
 
 **Critérios de aceite:**
-- [ ] Freelancer sem onboarding completo é redirecionado para `/onboarding` ao logar
-- [ ] Formulário salva endereço e dados financeiros no banco
-- [ ] Edge Function chama `POST /v1/proposals` com sucesso no sandbox
-- [ ] `validapay_form_id` e `validapay_onboarding_status = 'em_analise'` são salvos
-- [ ] URL de KYC (`urlDocumentscopy`) é exibida como botão para o freelancer
-- [ ] Freelancer com `validapay_onboarding_status = 'aprovado'` não vê tela de onboarding
+- [x] Freelancer sem onboarding vê modal ao entrar na área de extras
+- [x] CEP auto-preenche campos via ViaCEP
+- [x] Chave PIX validada por tipo (frontend + backend)
+- [x] Edge Function chama `POST /v1/proposals` com sucesso no sandbox
+- [x] `validapay_form_id`, `validapay_onboarding_status = 'em_analise'`, `pix_key` salvos
+- [x] URL de KYC exibida como botão
+- [x] Freelancer com `validapay_onboarding_status` preenchido não vê o modal
+- [x] JWT identifica o usuário — nunca campo no body
 
-**Estimativa:** G
-**Prioridade:** Alta
+**Estimativa:** G — **CONCLUÍDO**
 
 ---
 
@@ -105,28 +121,23 @@ ALTER TABLE freelancers ADD COLUMN validapay_onboarding_status text
 
 **Endpoints Valida Pay utilizados:**
 - Webhook recebido: evento `account_approved`
-  ```json
-  {
-    "event": "account_approved",
-    "account": { "account": "123456" },
-    "documentNumber": "CPF do freelancer"
-  }
-  ```
 
 **O que implementar:**
-- Edge Function `validapay-webhook/index.ts` (única função para todos os webhooks):
-  - Roteamento por `event`:
-    - `account_approved` → busca freelancer por CPF, salva `validapay_account_number`, atualiza `validapay_onboarding_status = 'aprovado'`
-    - `charge.paid` → tratado na US-06
-  - Responde `200 OK` imediatamente em todos os casos (evitar reenvio da Valida Pay)
+- Edge Function `validapay-webhook/index.ts` (roteador central de eventos):
+  - `account_approved` → busca freelancer por CPF (`documentNumber`), salva `validapay_account_number`, atualiza `validapay_onboarding_status = 'aprovado'`
+  - `charge.paid` → tratado na US-05
+  - Outros eventos → `200 OK` e ignora
+  - Responde `200` imediatamente em todos os casos
 
-**Triggers/migrations necessários:** Nenhum (usa colunas criadas em US-02)
+**Segurança:** Validar assinatura HMAC do webhook (se Valida Pay suportar) antes de processar.
+
+**Triggers/migrations necessários:** Nenhum adicional
 
 **Critérios de aceite:**
-- [ ] Webhook recebe `account_approved` e salva `validapay_account_number` no freelancer correto (busca por CPF)
+- [ ] Webhook recebe `account_approved` e salva `validapay_account_number` pelo CPF
 - [ ] `validapay_onboarding_status` muda para `'aprovado'`
-- [ ] Freelancer aprovado consegue se candidatar a vagas (verificação de status no frontend)
-- [ ] Eventos desconhecidos respondem `200` e são ignorados sem erro
+- [ ] Freelancer aprovado consegue se candidatar (RLS + frontend verificam status)
+- [ ] Responde `200` imediatamente
 
 **Estimativa:** M
 **Prioridade:** Alta
@@ -135,57 +146,63 @@ ALTER TABLE freelancers ADD COLUMN validapay_onboarding_status text
 
 ### US-04 — Gerar cobrança PIX com split ao aprovar candidato
 
-**Como** empresa, **quero** que ao aprovar um candidato seja gerada automaticamente uma cobrança PIX com split **para** que R$10 vá para a plataforma e o restante vá direto para a subconta do freelancer.
+**Como** empresa, **quero** que ao aprovar um candidato seja gerada automaticamente uma cobrança PIX com split **para** que R$10 fique na master do QueroExtra (taxa) e o valor líquido vá para a subconta do freelancer na Valida Pay.
 
 **Endpoints Valida Pay utilizados:**
-- `POST {{base_url}}/v1/charges/pix` — cobrança com split automático
+- `POST {{base_url}}/v1/charges/pix` — cobrança com split para subconta do freelancer
 
 **O que implementar:**
 - Edge Function `create-pix-charge/index.ts`:
-  - Recebe `application_id`
-  - Valida que `freelancers.validapay_account_number` está preenchido (subconta aprovada)
-  - Calcula: `valor_bruto = job.valor`, `taxa_plataforma = 10.00`, `valor_liquido = valor_bruto - 10.00`
-  - Chama `POST /v1/charges/pix`:
+  - Recebe `{ application_id }` — único parâmetro do frontend
+  - Empresa autenticada via JWT (`auth.uid()`)
+  - Validações em ordem:
+    1. `application_id` pertence a uma vaga da empresa autenticada
+    2. Candidatura com `status = 'aprovado'`
+    3. Freelancer tem `validapay_account_number` preenchido (subconta aprovada)
+    4. Sem `transaction` ativa para este `application_id` (idempotência)
+  - Gera `idempotency_key = crypto.randomUUID()` e salva antes de chamar a API
+  - Chama `POST /v1/charges/pix` com split:
     ```json
     {
-      "amount": valor_bruto,
+      "amount": job.valor,
       "expiration": 3600,
-      "customer": {
-        "name": empresa.nome,
-        "documentNumber": empresa.cnpj_cpf,
-        "email": empresa.email,
-        "phone": empresa.celular
-      },
+      "customer": { "name": empresa.nome, "documentNumber": empresa.cnpj_cpf, "email": empresa.email, "phone": empresa.celular },
       "split": [
-        {
-          "type": "fixed",
-          "accountNumber": freelancer.validapay_account_number,
-          "amount": valor_liquido
-        }
+        { "type": "fixed", "amount": 10.00 },
+        { "type": "fixed", "accountNumber": "validapay_account_number", "amount": job.valor - 10 }
       ],
-      "metadata": { "externalId": application_id },
+      "metadata": { "externalId": "application_id" },
       "webhookUrl": "<SUPABASE_URL>/functions/v1/validapay-webhook"
     }
     ```
-  - Cria registro em `transactions` com `status = 'retido'`, `gateway_charge_id = chargeId`, `emv`, `application_id`
-  - Retorna `{ chargeId, emv }` para o frontend exibir o QR Code
-- Chamar esta Edge Function em `CandidatosTab.tsx` após `handleApprove()` bem-sucedido
+    Header: `X-Idempotency-Key: <idempotency_key>`
+  - Cria `transactions` com `status = 'retido'`, `gateway_charge_id`, `emv`, `idempotency_key`
+  - Retorna `{ chargeId, emv }` para o frontend
+
+**Segurança anti-vulnerabilidade:**
+- Todos os dados sensíveis (valor, empresa, freelancer, `validapay_account_number`) buscados do banco via service role — nunca aceitos do body
+- Ownership validada: empresa autenticada = empresa da vaga
+- `X-Idempotency-Key` — reenvio não gera cobrança duplicada
+- Erro `FREELANCER_SUBCONTA_NOT_FOUND` se `validapay_account_number` não existe
 
 **Triggers/migrations necessários:**
 ```sql
 ALTER TABLE transactions
   ADD COLUMN application_id uuid REFERENCES applications ON DELETE RESTRICT,
   ADD COLUMN gateway_charge_id text,
-  ADD COLUMN emv text;
--- Manter stripe_payment_intent como nullable para não quebrar nada
+  ADD COLUMN emv text,
+  ADD COLUMN paid_at timestamptz,
+  ADD COLUMN idempotency_key text UNIQUE,
+  ADD COLUMN gateway_payment_id text;
 ```
 
 **Critérios de aceite:**
-- [ ] Aprovação do candidato dispara a Edge Function
-- [ ] Split configurado corretamente: R$10 para master, restante para subconta do freelancer
-- [ ] `transactions` criada com `status = 'retido'`, `gateway_charge_id` e `emv` preenchidos
-- [ ] Erro se freelancer não tiver `validapay_account_number` — bloqueia aprovação com mensagem clara
-- [ ] Erro da Valida Pay é tratado e não deixa candidatura aprovada sem transaction
+- [ ] Aprovação dispara a Edge Function
+- [ ] PIX com split criado corretamente (R$10 master + valor líquido para subconta)
+- [ ] Ownership validada
+- [ ] Segundo call com mesmo `application_id` retorna cobrança existente (idempotente)
+- [ ] Erro se freelancer sem subconta aprovada
+- [ ] `transactions` criada com `status = 'retido'`
 
 **Estimativa:** G
 **Prioridade:** Alta
@@ -194,31 +211,25 @@ ALTER TABLE transactions
 
 ### US-05 — Exibir QR Code PIX na tela da empresa
 
-**Como** empresa, **quero** ver o QR Code PIX imediatamente após aprovar um candidato **para** poder pagar pelo app do banco na hora.
+**Como** empresa, **quero** ver o QR Code PIX imediatamente após aprovar um candidato **para** pagar pelo app do banco na hora.
 
 **Endpoints Valida Pay utilizados:**
-- `GET {{base_url}}/v1/charges/:chargeId` — polling de status (PENDING → PAID)
+- `GET {{base_url}}/v1/charges/:chargeId` — via Edge Function proxy
 
 **O que implementar:**
 - Componente `PixQrCodeModal.tsx` em `src/components/empresa/`:
-  - Exibe QR Code renderizado a partir do `emv` (usar `qrcode.react`)
-  - Exibe código "copia e cola" (`emv`) em campo copiável
-  - Exibe valor e nome do freelancer
-  - Texto: "Aguardando pagamento PIX..."
-  - Polling a cada 5s via Edge Function proxy em `GET /v1/charges/:chargeId`
-  - Ao detectar `status: "PAID"`: fecha modal, exibe toast de sucesso "Pagamento confirmado!"
-  - Botão "Cancelar cobrança" → `DELETE /v1/charges/:chargeId` + `transactions.status = 'estornado'`
-  - Expiração após 60 min com mensagem "QR Code expirado — gere um novo"
-- Abrir modal em `CandidatosTab.tsx` com retorno `{ chargeId, emv }` da US-04
-
-**Triggers/migrations necessários:** Nenhum
+  - QR Code renderizado a partir do `emv` (lib `qrcode.react`)
+  - Código "copia e cola" copiável
+  - Polling a cada 5s via Edge Function `check-pix-status` (nunca direto do frontend)
+  - Ao detectar `PAID`: fecha modal, toast "Pagamento confirmado!"
+  - Botão "Cancelar": Edge Function `cancel-pix-charge` → `DELETE /v1/charges/:chargeId` + `status = 'estornado'`
+  - Expiração após 60 min com opção de regerar
 
 **Critérios de aceite:**
 - [ ] QR Code exibido imediatamente após aprovação
-- [ ] Código copia-e-cola disponível abaixo do QR Code
-- [ ] Polling detecta `status: "PAID"` e fecha modal com feedback
-- [ ] Cancelar cobrança funciona e atualiza `transactions.status = 'estornado'`
-- [ ] QR Code expirado exibe mensagem e opção de regerar
+- [ ] Polling detecta `PAID` e fecha modal com feedback
+- [ ] Cancelamento funciona e atualiza `status = 'estornado'`
+- [ ] Frontend nunca chama Valida Pay diretamente
 
 **Estimativa:** M
 **Prioridade:** Alta
@@ -231,159 +242,118 @@ ALTER TABLE transactions
 
 **Endpoints Valida Pay utilizados:**
 - Webhook recebido: evento `charge.paid`
-  ```json
-  {
-    "event": "charge.paid",
-    "chargeId": "cha_xxx",
-    "status": "PAID",
-    "amount": 100.0,
-    "metadata": { "externalId": "application_id" }
-  }
-  ```
 
 **O que implementar:**
-- Adicionar handler `charge.paid` na Edge Function `validapay-webhook/index.ts` (criada em US-03):
-  - Busca transaction por `gateway_charge_id = chargeId`
-  - Se `status = 'retido'`, atualiza `transactions.paid_at = now()` (novo campo opcional para auditoria)
-  - Responde `200 OK`
-
-**Observação:** O status permanece `'retido'` — o split já depositou o valor na subconta do freelancer, mas o saque só é permitido após checkout (US-07). O webhook serve como confirmação de auditoria.
-
-**Triggers/migrations necessários:** Nenhum (opcional: `ADD COLUMN paid_at timestamptz` em transactions)
+- Handler `charge.paid` na Edge Function `validapay-webhook/index.ts`:
+  - Busca `transaction` por `gateway_charge_id`
+  - Atualiza `paid_at = now()` — status permanece `'retido'`
+  - `charge.canceled` → `transactions.status = 'estornado'`
+  - Responde `200` imediatamente
 
 **Critérios de aceite:**
-- [ ] Webhook recebe `charge.paid` e encontra transaction por `gateway_charge_id`
+- [ ] `charge.paid` preenche `paid_at` e mantém `status = 'retido'`
+- [ ] `charge.canceled` atualiza `status = 'estornado'`
 - [ ] Responde `200` imediatamente
-- [ ] Não altera status (permanece `'retido'` até checkout)
-- [ ] Evento `charge.canceled` muda `transactions.status = 'estornado'`
 
 **Estimativa:** P
 **Prioridade:** Alta
 
 ---
 
-### US-07 — Trigger: checkout confirmado libera saque na plataforma
+### US-07 — Checkout confirmado: master libera saque da subconta para chave PIX do freelancer
 
-**Como** plataforma, **quero** que ao confirmar o checkout o pagamento seja marcado como liberado automaticamente **para** que o freelancer possa sacar sem intervenção manual.
+**Como** plataforma, **quero** que ao confirmar o checkout a master libere automaticamente o saque da subconta do freelancer para a chave PIX cadastrada **para** que o dinheiro caia na conta bancária dele sem intervenção manual.
 
-**Endpoints Valida Pay utilizados:** Nenhum
+**Endpoints Valida Pay utilizados:**
+- `POST {{base_url}}/v1/wallet/withdraw` — saque da subconta do freelancer para chave PIX de mesma titularidade
 
 **O que implementar:**
-- Migration com trigger de banco `trg_liberar_pagamento_no_checkout`:
-  ```sql
-  CREATE OR REPLACE FUNCTION liberar_pagamento_no_checkout()
-  RETURNS trigger AS $$
-  DECLARE
-    v_freelancer_id uuid;
-    v_transaction_id uuid;
-  BEGIN
-    IF NEW.tipo = 'checkout'
-      AND NEW.confirmado_em IS NOT NULL
-      AND OLD.confirmado_em IS NULL
-    THEN
-      SELECT a.freelancer_id INTO v_freelancer_id
-      FROM applications a WHERE a.id = NEW.application_id;
 
-      UPDATE transactions
-        SET status = 'liberado'
-        WHERE application_id = NEW.application_id
-          AND status = 'retido'
-      RETURNING id INTO v_transaction_id;
-    END IF;
-    RETURN NEW;
-  END;
-  $$ LANGUAGE plpgsql SECURITY DEFINER;
+**Trigger + Edge Function `release-payment/index.ts`:**
 
-  CREATE TRIGGER trg_liberar_pagamento_no_checkout
-    AFTER UPDATE ON checkins
-    FOR EACH ROW EXECUTE FUNCTION liberar_pagamento_no_checkout();
-  ```
-- Verificar que não conflita com trigger existente `trigger_auto_generate_checkout`
+Fluxo de segurança interno (ordem importa):
+1. Recebe `{ application_id }` — chamado pelo trigger via `service_role_key`
+2. Busca `transaction` do banco: valida `status = 'retido'` E `paid_at IS NOT NULL`
+3. **Se `status != 'retido'` → aborta** (idempotência — previne double spend)
+4. Busca do banco: `freelancer.validapay_account_number`, `freelancer.pix_key`, `freelancer.pix_key_type` — **NUNCA do body**
+5. Calcula `valor_liquido = job.valor - 10.00`
+6. Chama `POST /v1/wallet/withdraw` com `X-Idempotency-Key: transaction.idempotency_key`:
+   ```json
+   {
+     "amount": valor_liquido,
+     "pixKey": freelancer.pix_key,
+     "pixKeyType": freelancer.pix_key_type,
+     "accountId": freelancer.validapay_account_number
+   }
+   ```
+   > A Valida Pay valida que a chave PIX pertence ao mesmo CPF da subconta (`accountId`). O master controla o timing — freelancer não tem API credentials para sacar sozinho.
+7. Atualiza `transactions.status = 'liberado'` + `gateway_payment_id` **somente após** confirmação
+8. Falha na API: mantém `status = 'retido'` + log de erro para retry
 
-**Triggers/migrations necessários:**
-- Migration acima com função + trigger
+**Segurança anti-vulnerabilidade (crítico):**
+- `pix_key`, `pix_key_type`, `validapay_account_number` sempre do banco — nunca do request body
+- Double spend impossível: check no banco + `X-Idempotency-Key` na API
+- `status = 'liberado'` gravado **após** confirmação (não otimista)
+- Edge Function só chamável com `service_role_key` (trigger do banco) — não exposta ao frontend
+
+**Migrations/triggers necessários:**
+```sql
+CREATE OR REPLACE FUNCTION trigger_release_payment_on_checkout()
+RETURNS trigger AS $$
+BEGIN
+  IF NEW.tipo = 'checkout'
+    AND NEW.confirmado_em IS NOT NULL
+    AND OLD.confirmado_em IS NULL
+  THEN
+    PERFORM net.http_post(
+      url := current_setting('app.supabase_url') || '/functions/v1/release-payment',
+      headers := jsonb_build_object(
+        'Content-Type', 'application/json',
+        'Authorization', 'Bearer ' || current_setting('app.service_role_key')
+      ),
+      body := jsonb_build_object('application_id', NEW.application_id)
+    );
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER trg_liberar_pagamento_no_checkout
+  AFTER UPDATE ON checkins
+  FOR EACH ROW EXECUTE FUNCTION trigger_release_payment_on_checkout();
+```
 
 **Critérios de aceite:**
-- [ ] Confirmar checkout muda `transactions.status` de `'retido'` para `'liberado'`
-- [ ] Trigger não dispara em check-ins (tipo = 'checkin')
-- [ ] Trigger não dispara se `confirmado_em` já estava preenchido (idempotente)
-- [ ] Não conflita com trigger existente `trigger_auto_generate_checkout`
+- [ ] Checkout confirmado dispara Edge Function automaticamente
+- [ ] `wallet/withdraw` chamado com `accountId` da subconta + `pixKey` do banco (nunca do request)
+- [ ] `status = 'liberado'` + `gateway_payment_id` após confirmação da Valida Pay
+- [ ] Segunda chamada com mesmo `application_id` não gera segundo pagamento (idempotente)
+- [ ] Falha mantém `status = 'retido'` + log de erro
+- [ ] Trigger não dispara em check-ins e não dispara se `confirmado_em` já preenchido
 
-**Estimativa:** M
+**Estimativa:** G
 **Prioridade:** Alta
 
 ---
 
-### US-08 — Tela de carteira do freelancer com saldo real
+### US-08 — Tela de carteira do freelancer (histórico de transações)
 
-**Como** freelancer, **quero** ver meu saldo disponível para saque na carteira **para** saber o quanto tenho disponível após meus trabalhos.
-
-**Endpoints Valida Pay utilizados:**
-- `GET {{base_url}}/v1/wallet/balance?accountId={{validapay_account_number}}` — saldo real na subconta
+**Como** freelancer, **quero** ver meu histórico de pagamentos **para** acompanhar meus ganhos na plataforma.
 
 **O que implementar:**
-- Edge Function `get-wallet-balance/index.ts`:
-  - Busca `freelancers.validapay_account_number` do usuário autenticado
-  - Chama `GET /v1/wallet/balance?accountId=xxx`
-  - Retorna `{ balance, accountNumber }`
-- Substituir mock em `src/pages/extras/ExtrasHome.tsx` (componente `CarteiraPage`):
-  - Exibir saldo real retornado pela Edge Function
-  - Listar últimas transações liberadas do banco interno
-  - Status do onboarding: se `validapay_onboarding_status != 'aprovado'`, exibe banner "Complete seu cadastro para receber pagamentos"
-  - Botão "Sacar" habilitado apenas se `balance > 0` e `validapay_onboarding_status = 'aprovado'`
+- Substituir mock em `CarteiraPage.tsx`:
+  - Histórico de transações via `supabase.from('transactions')` (RLS garante isolamento)
+  - Status visual: `retido` (amarelo — "Aguardando conclusão do serviço") / `liberado` (verde — "Pago via PIX") / `estornado` (cinza — "Cancelado")
+  - Nome da empresa e vaga, valor líquido, data
+  - Banner se `validapay_onboarding_status !== 'aprovado'`
 
-**Triggers/migrations necessários:** Nenhum
-
-**Critérios de aceite:**
-- [ ] Saldo exibido corresponde ao retorno de `GET /v1/wallet/balance`
-- [ ] Lista de transações com `status = 'liberado'` exibida com valor e data
-- [ ] Banner de onboarding pendente exibido corretamente
-- [ ] Botão "Sacar" desabilitado quando saldo = 0
+```sql
+ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "read_own_transactions" ON transactions
+  FOR SELECT USING (freelancer_id = auth.uid() OR empresa_id = auth.uid());
+```
 
 **Estimativa:** M
-**Prioridade:** Média
-
----
-
-### US-09 — Fluxo de saque do freelancer via subconta Valida Pay
-
-**Como** freelancer, **quero** sacar meu saldo disponível para minha chave PIX **para** receber o dinheiro na minha conta bancária.
-
-**Endpoints Valida Pay utilizados:**
-- `POST {{base_url}}/v1/wallet/withdraw` — saque da subconta para chave PIX
-
-**O que implementar:**
-- Edge Function `freelancer-withdraw/index.ts`:
-  - Recebe `{ amount, pixKey, pixKeyType }` do freelancer autenticado
-  - Busca `validapay_account_number` e `cpf` do freelancer
-  - Valida: `amount > 0`, saldo suficiente (verificar via `GET /v1/wallet/balance`)
-  - Chama `POST /v1/wallet/withdraw`:
-    ```json
-    {
-      "amount": amount,
-      "pixKey": pixKey,
-      "pixKeyType": pixKeyType,
-      "accountId": validapay_account_number
-    }
-    ```
-  - Retorna `{ withdrawalId, status: "PROCESSING" }` para o frontend
-- UI em `CarteiraPage`: bottom sheet "Sacar" com:
-  - Valor a sacar (max = saldo disponível)
-  - Tipo de chave PIX: dropdown (CPF / Email / Telefone / Chave aleatória)
-  - Campo da chave PIX
-  - Aviso: "O saque só pode ser feito para uma chave PIX de mesma titularidade (CPF: xxx.xxx.xxx-xx)"
-  - Botão "Confirmar Saque" com loading state
-
-**Triggers/migrations necessários:** Nenhum
-
-**Critérios de aceite:**
-- [ ] Saque com chave PIX válida retorna `withdrawalId`
-- [ ] Erro `OWNERSHIP_MISMATCH` exibe mensagem clara ("A chave PIX deve pertencer ao titular da conta")
-- [ ] Não permite sacar mais do que o saldo disponível
-- [ ] Loading state durante chamada à API
-- [ ] Toast de confirmação após saque iniciado com sucesso
-
-**Estimativa:** G
 **Prioridade:** Média
 
 ---
@@ -393,69 +363,61 @@ ALTER TABLE transactions
 | Regra | Valor |
 |-------|-------|
 | Valor mínimo de vaga | R$ 50,00 |
-| Taxa da plataforma | R$ 10,00 fixo (vagas até R$ 200) |
-| Split | Automático na cobrança (Valida Pay) |
-| Retenção | Pagamento na subconta do freelancer, saque bloqueado até checkout |
-| Quem inicia o saque | Freelancer (manual, após checkout confirmado) |
-| Titularidade do saque | Chave PIX deve pertencer ao mesmo CPF do freelancer |
-| Candidatura bloqueada | Freelancer sem `validapay_onboarding_status = 'aprovado'` não pode ser aprovado |
+| Taxa da plataforma | R$ 10,00 fixo, retida na master via split |
+| Modelo de pagamento | Split na cobrança + escrow via subconta |
+| Quando o split ocorre | No momento do pagamento PIX pela empresa |
+| Quando o freelancer recebe | Após checkout confirmado (master chama `wallet/withdraw`) |
+| Quem controla o saque | Apenas a master — freelancer não tem API credentials |
+| Pré-requisito para candidatura | `validapay_onboarding_status = 'aprovado'` (RLS + frontend) |
 
 ---
 
-## Gaps e Decisões Pendentes
+## Segurança — Princípios Aplicados
 
-### Migrations necessárias (resumo)
+| Ponto de risco | Medida |
+|----------------|--------|
+| `pix_key` e `accountId` no pagamento | Sempre buscados do banco (service role), nunca do request body |
+| Double spend | `status = 'retido'` verificado antes + `X-Idempotency-Key` na API |
+| Identificação do usuário | JWT `auth.uid()` — nunca `freelancer_id` no body |
+| Ownership da cobrança | Edge Function valida que `application_id` pertence à empresa autenticada |
+| Candidatura sem subconta aprovada | RLS no banco + botão desabilitado no frontend |
+| Timing do repasse | Master controla `wallet/withdraw` — freelancer não tem acesso à API |
+| Webhook falso | Validar assinatura HMAC (se disponível na Valida Pay) |
+| Credenciais Valida Pay | Apenas env vars do Supabase — zero no frontend |
 
-| Tabela | Tipo | Coluna(s) |
-|--------|------|-----------|
-| `profiles` | ADD | `cep`, `rua`, `numero`, `complemento`, `bairro`, `cidade`, `estado` |
-| `freelancers` | ADD | `faixa_renda`, `ocupacao`, `faixa_patrimonio` |
-| `freelancers` | ADD | `validapay_form_id`, `validapay_account_number`, `validapay_onboarding_status` |
-| `freelancers` | MANTER | `stripe_account_id` (nullable, não usar) |
-| `transactions` | ADD | `application_id` (FK), `gateway_charge_id`, `emv` |
+---
 
-### Triggers a criar
+## Migrations — Resumo
 
-| Nome | Tabela | Evento | Ação |
-|------|--------|--------|------|
-| `trg_liberar_pagamento_no_checkout` | `checkins` | AFTER UPDATE | `transactions.status → 'liberado'` |
+| Tabela | Colunas adicionadas |
+|--------|---------------------|
+| `profiles` | `cep`, `rua`, `numero`, `complemento`, `bairro`, `cidade`, `estado` |
+| `freelancers` | `faixa_renda`, `ocupacao`, `faixa_patrimonio`, `nome_mae`, `data_nascimento`, `validapay_form_id`, `validapay_account_number`, `validapay_onboarding_status`, `pix_key`, `pix_key_type` |
+| `transactions` | `application_id` (FK), `gateway_charge_id`, `emv`, `paid_at`, `idempotency_key`, `gateway_payment_id` |
 
-**Atenção:** Verificar conflito com `trigger_auto_generate_checkout` (existente em `checkins`).
+---
 
-### Edge Functions a criar
+## Edge Functions — Resumo
 
-| Função | US | Responsabilidade |
-|--------|----|-----------------|
-| `validapay-client` | US-01 | Auth + helper fetch |
-| `create-subaccount` | US-02 | Criar proposta PF na Valida Pay |
-| `validapay-webhook` | US-03/06 | Receber todos os eventos |
-| `create-pix-charge` | US-04 | PIX com split |
-| `get-wallet-balance` | US-08 | Saldo da subconta |
-| `freelancer-withdraw` | US-09 | Saque via Valida Pay |
+| Função | US | Status |
+|--------|----|--------|
+| `_shared/validapay.ts` | US-01 | ✅ Deployada |
+| `create-subaccount` | US-02 | ✅ Deployada |
+| `validapay-webhook` | US-03/06 | Pendente |
+| `create-pix-charge` | US-04 | Pendente |
+| `check-pix-status` | US-05 | Pendente |
+| `cancel-pix-charge` | US-05 | Pendente |
+| `release-payment` | US-07 | Pendente |
 
-### Variáveis de ambiente necessárias
+---
 
-```
-VALIDAPAY_BASE_URL=
-VALIDAPAY_AUTH_URL=
-VALIDAPAY_CLIENT_ID=
-VALIDAPAY_CLIENT_SECRET=
-```
+## Decisões e Gaps Pendentes
 
-### Decisões de produto pendentes
-
-1. **Taxa para vagas > R$ 200:** A regra atual é R$ 10 fixo para vagas até R$ 200. Qual a taxa acima disso?
-2. **Valor mínimo de saque:** Qual o valor mínimo permitido para saque? (impacta validação da US-09)
-3. **Bloqueio de candidatura:** O freelancer sem subconta aprovada deve ser oculto das buscas ou apenas bloqueado no momento da aprovação pela empresa?
-4. **Rejeição de subconta:** Se a Valida Pay rejeitar o KYC do freelancer, qual o fluxo? Ele pode retentar?
-5. **Códigos financeiros da Valida Pay:** Mapear os enums de `declaredIncome`, `occupation` e `netWorth` para labels amigáveis nos dropdowns do onboarding
-
-### Riscos para o prazo
-
-| Risco | Impacto | Mitigação |
-|-------|---------|-----------|
-| Credenciais sandbox não disponíveis no dia 1 | Bloqueia US-02 a US-09 | Solicitar hoje; US-01 pode ser codificada sem testar |
-| KYC sandbox não aprova automaticamente | Bloqueia teste do fluxo completo | Verificar com Valida Pay se sandbox aprova automaticamente |
-| Trigger conflita com `trigger_auto_generate_checkout` | Dupla execução no checkout | Inspecionar função antes de criar o trigger |
-| 9 US em 7 dias | Sprint incompleta | Priorizar US-01 a US-07 (core do pagamento); US-08 e US-09 são entregáveis paralelos |
-| `wallets` não criada automaticamente no cadastro | US-07 sem carteira para crédito futuro | Verificar trigger `handle_new_user`; adicionar criação de wallet se ausente |
+| Item | Status |
+|------|--------|
+| Assinatura HMAC de webhooks | ⚠️ Verificar se Valida Pay oferece |
+| `pg_net` disponível no projeto | ⚠️ Verificar antes de criar trigger |
+| Conflito com `trigger_auto_generate_checkout` | ⚠️ Inspecionar antes de criar o trigger |
+| Taxa acima de R$200 | ⚠️ Definir com produto (R$10 fixo ou %?) |
+| Freelancer pode atualizar chave PIX? | ⚠️ Definir (nova chave afeta subcontas em andamento?) |
+| Sandbox aprova subcontas automaticamente? | ⚠️ Verificar para teste end-to-end |
