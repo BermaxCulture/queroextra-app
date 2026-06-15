@@ -41,7 +41,18 @@ Deno.serve(async (req) => {
       faixa_renda, ocupacao, faixa_patrimonio,
       // Dados pessoais (já existem no perfil, enviados pelo frontend)
       nome_mae, data_nascimento, pessoa_politicamente_exposta,
+      // Chave PIX para repasse pós-checkout
+      pix_key, pix_key_type,
     } = body
+
+    if (!pix_key || !pix_key_type) {
+      return json({ error: 'Chave PIX obrigatória' }, 400)
+    }
+
+    const PIX_KEY_TYPES = ['cpf', 'telefone', 'email', 'chave_aleatoria']
+    if (!PIX_KEY_TYPES.includes(pix_key_type)) {
+      return json({ error: 'Tipo de chave PIX inválido' }, 400)
+    }
 
     // Busca perfil + freelancer do usuário autenticado
     const { data: profile, error: profileError } = await supabase
@@ -78,11 +89,13 @@ Deno.serve(async (req) => {
       cep, rua, numero, complemento, bairro, cidade, estado,
     }).eq('id', user.id)
 
-    // Salva dados financeiros no freelancer
+    // Salva dados financeiros + chave PIX no freelancer
     await supabase.from('freelancers').update({
       faixa_renda,
       ocupacao,
       faixa_patrimonio,
+      pix_key,
+      pix_key_type,
       validapay_onboarding_status: 'em_analise',
     }).eq('id', freelancer.id)
 

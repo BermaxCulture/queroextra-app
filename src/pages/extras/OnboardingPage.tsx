@@ -69,11 +69,11 @@ type FinancialData = z.infer<typeof financialSchema>
 // ─── Select options ──────────────────────────────────────────────────────────
 
 const RENDA_OPTIONS = [
-  { value: 'DINP01', label: 'Até R$ 1.500/mês' },
-  { value: 'DINP02', label: 'R$ 1.500 a R$ 3.000/mês' },
-  { value: 'DINP03', label: 'R$ 3.000 a R$ 5.000/mês' },
-  { value: 'DINP04', label: 'R$ 5.000 a R$ 10.000/mês' },
-  { value: 'DINP05', label: 'Acima de R$ 10.000/mês' },
+  { value: '1DINP01', label: 'Até R$ 1.500/mês' },
+  { value: '1DINP02', label: 'R$ 1.500 a R$ 3.000/mês' },
+  { value: '1DINP03', label: 'R$ 3.000 a R$ 5.000/mês' },
+  { value: '1DINP04', label: 'R$ 5.000 a R$ 10.000/mês' },
+  { value: '1DINP05', label: 'Acima de R$ 10.000/mês' },
 ]
 
 const OCUPACAO_OPTIONS = [
