@@ -100,8 +100,9 @@ Deno.serve(async (req) => {
     }).eq('id', freelancer.id)
 
     // Cria proposta de subconta PF na Valida Pay
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const webhookUrl = `${supabaseUrl}/functions/v1/validapay-webhook`
+    // URL pública da Edge Function de webhook (formato correto, sem JWT)
+    const projectRef = Deno.env.get('SUPABASE_URL')!.replace('https://', '').replace('.supabase.co', '')
+    const webhookUrl = `https://${projectRef}.supabase.co/functions/v1/validapay-webhook`
 
     const proposalRes = await validaPayFetch('/v1/proposals', {
       method: 'POST',
@@ -143,31 +144,24 @@ Deno.serve(async (req) => {
     }
 
     const proposal = await proposalRes.json()
+    console.log('[create-subaccount] Resposta da Valida Pay:', JSON.stringify(proposal))
 
-    // Salva o formId para acompanhar o status
+    // URL de KYC: pode vir imediatamente na resposta OU via webhook assíncrono
+    const urlDocumentscopy =
+      proposal.urlDocumentscopy ??
+      proposal.proposalStatus?.urlDocumentscopy ??
+      null
+
+    // Salva o formId (e a URL de KYC se já disponível)
     await supabase.from('freelancers').update({
       validapay_form_id: proposal.formId,
+      ...(urlDocumentscopy ? { validapay_url_documentscopy: urlDocumentscopy } : {}),
     }).eq('id', freelancer.id)
-
-    // Busca o status da proposta para obter a URL de KYC
-    const statusRes = await validaPayFetch(`/v1/proposals/${proposal.formId}`)
-    let urlDocumentscopy: string | null = null
-
-    if (statusRes.ok) {
-      const statusData = await statusRes.json()
-      urlDocumentscopy = statusData?.proposalStatus?.urlDocumentscopy ?? null
-    }
-
-    if (urlDocumentscopy) {
-      await supabase.from('freelancers').update({
-        validapay_url_documentscopy: urlDocumentscopy,
-      }).eq('id', freelancer.id)
-    }
 
     return json({
       ok: true,
       formId: proposal.formId,
-      urlDocumentscopy,
+      urlDocumentscopy, // null se ainda não disponível (vem via webhook)
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido'

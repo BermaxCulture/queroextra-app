@@ -6,37 +6,100 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// ─── Verificação de Assinatura HMAC-SHA256 ────────────────────────────────────
+async function verifySignature(body: string, signatureHeader: string | null, secret: string): Promise<boolean> {
+  if (!signatureHeader) return false
+
+  const parts = Object.fromEntries(
+    signatureHeader.split(',').map((p) => p.split('=') as [string, string])
+  )
+  const timestamp = parts['t']
+  const receivedSig = parts['v1']
+  if (!timestamp || !receivedSig) return false
+
+  // Proteção contra replay attack (5 minutos)
+  const age = Date.now() - parseInt(timestamp, 10)
+  if (age > 5 * 60 * 1000) {
+    console.warn('[webhook] Evento rejeitado: timestamp muito antigo', { age })
+    return false
+  }
+
+  // HMAC-SHA256 usando Web Crypto API do Deno
+  const encoder = new TextEncoder()
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  )
+  const sigBuffer = await crypto.subtle.sign(
+    'HMAC',
+    keyMaterial,
+    encoder.encode(`${timestamp}.${body}`)
+  )
+  const expectedSig = Array.from(new Uint8Array(sigBuffer))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+
+  // Comparação segura (evita timing attacks)
+  if (expectedSig.length !== receivedSig.length) return false
+  let mismatch = 0
+  for (let i = 0; i < expectedSig.length; i++) {
+    mismatch |= expectedSig.charCodeAt(i) ^ receivedSig.charCodeAt(i)
+  }
+  return mismatch === 0
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
+    // ─── Lê o body como texto (necessário para verificar a assinatura) ──────────
+    const rawBody = await req.text()
+    const signatureHeader = req.headers.get('x-webhook-signature')
+    const webhookSecret = Deno.env.get('VALIDAPAY_WEBHOOK_SECRET') ?? ''
+
+    if (webhookSecret) {
+      const valid = await verifySignature(rawBody, signatureHeader, webhookSecret)
+      if (!valid) {
+        console.error('[webhook] Assinatura inválida:', signatureHeader)
+        return new Response(JSON.stringify({ error: 'Assinatura inválida' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 401,
+        })
+      }
+    } else {
+      console.warn('[webhook] VALIDAPAY_WEBHOOK_SECRET não definido — verificação de assinatura desabilitada')
+    }
+
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '' // Usando Service Role para ignorar RLS no webhook
     )
 
-    const payload = await req.json()
+    const payload = JSON.parse(rawBody)
     console.log('Webhook recebido da ValidaPay:', JSON.stringify(payload, null, 2))
 
     // 1. Aprovação de Subconta (account_approved)
-    if (payload.event === 'account_approved' && payload.status === 'CONFIRMED') {
-      const formId = payload.formId
+    if (payload.event === 'account_approved') {
       const accountNumber = payload.account?.account
+      const documentNumber = payload.documentNumber
 
-      if (!formId || !accountNumber) {
-        throw new Error('Payload inválido: formId ou account.account ausente')
+      if (!accountNumber || !documentNumber) {
+        throw new Error('Payload inválido: account.account ou documentNumber ausente')
       }
 
-      // Atualiza o freelancer correspondente
+      // Atualiza o freelancer pelo CPF (documentNumber)
       const { data, error } = await supabaseClient
         .from('freelancers')
         .update({
           validapay_onboarding_status: 'aprovado',
-          validapay_account_number: accountNumber
+          validapay_account_number: accountNumber,
         })
-        .eq('validapay_form_id', formId)
+        .eq('cpf', documentNumber)
         .select()
 
       if (error) {
@@ -44,8 +107,8 @@ serve(async (req) => {
         throw error
       }
 
-      console.log(`Freelancer aprovado! formId: ${formId}, Conta: ${accountNumber}`)
-      
+      console.log(`Freelancer aprovado! CPF: ${documentNumber}, Conta: ${accountNumber}`)
+
       return new Response(JSON.stringify({ message: 'Webhook account_approved processado com sucesso' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
@@ -93,11 +156,33 @@ serve(async (req) => {
       })
     }
     // 3. Recebimento de Link de Documentos (onboarding.documentscopy)
-    if (payload.event === 'onboarding.documentscopy' && payload.data?.status === 'PENDING') {
-      const url = payload.data.url
-      const formId = payload.data.proposalId
+    // Estrutura real do payload (conforme doc e evento account_approved como referência):
+    // {
+    //   event: 'onboarding.documentscopy',
+    //   formId: 'xxx',
+    //   proposalStatus: { urlDocumentscopy: 'https://...' }
+    // }
+    // Também pode chegar sem 'event', com status PENDING e a url dentro do payload
+    if (payload.event === 'onboarding.documentscopy') {
+      // Tenta ler o formId e a url de acordo com variações possíveis do payload
+      const formId = payload.formId ?? payload.data?.proposalId ?? payload.proposalId
+      const url =
+        payload.proposalStatus?.urlDocumentscopy ??
+        payload.data?.url ??
+        payload.url
 
-      if (url && formId) {
+      console.log(`[onboarding.documentscopy] formId: ${formId}, url: ${url}`)
+
+      if (!formId) {
+        console.error('[onboarding.documentscopy] formId ausente no payload:', JSON.stringify(payload))
+        // Retorna 200 para não causar retentativas infinitas da ValidaPay
+        return new Response(JSON.stringify({ message: 'formId ausente, evento ignorado' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        })
+      }
+
+      if (url) {
         const { error } = await supabaseClient
           .from('freelancers')
           .update({ validapay_url_documentscopy: url })
@@ -107,12 +192,15 @@ serve(async (req) => {
           console.error('Erro ao salvar URL de documentos:', error)
           throw error
         }
-        console.log(`URL de documentos salva para formId: ${formId}`)
-        return new Response(JSON.stringify({ message: 'Webhook documentscopy processado com sucesso' }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 200,
-        })
+        console.log(`URL de documentos salva para formId: ${formId} -> ${url}`)
+      } else {
+        console.warn(`[onboarding.documentscopy] URL não encontrada no payload. formId: ${formId}. Payload completo:`, JSON.stringify(payload))
       }
+
+      return new Response(JSON.stringify({ message: 'Webhook documentscopy processado com sucesso' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      })
     }
 
     // 4. Conta Criada (payload final sem event)
