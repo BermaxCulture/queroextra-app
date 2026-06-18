@@ -163,7 +163,7 @@ serve(async (req) => {
     //   proposalStatus: { urlDocumentscopy: 'https://...' }
     // }
     // Também pode chegar sem 'event', com status PENDING e a url dentro do payload
-    if (payload.event === 'onboarding.documentscopy') {
+    if (payload.event === 'onboarding.documentscopy' || payload.event === 'onboarding.documents_copy') {
       // Tenta ler o formId e a url de acordo com variações possíveis do payload
       const formId = payload.formId ?? payload.data?.proposalId ?? payload.proposalId
       const url =

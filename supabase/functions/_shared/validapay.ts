@@ -1,11 +1,10 @@
-// Cache de token em nível de módulo — persiste enquanto o isolate Deno estiver aquecido
-let cachedToken: string | null = null
-let tokenExpiresAt = 0
+// Cache de tokens em nível de módulo — persiste enquanto o isolate Deno estiver aquecido
+const cachedTokens: Record<string, { token: string; expiresAt: number }> = {}
 
-export async function getValidaPayToken(): Promise<string> {
+export async function getValidaPayToken(scope: string): Promise<string> {
   // Reutiliza token se ainda válido (com 60s de margem)
-  if (cachedToken && Date.now() < tokenExpiresAt - 60_000) {
-    return cachedToken
+  if (cachedTokens[scope] && Date.now() < cachedTokens[scope].expiresAt - 60_000) {
+    return cachedTokens[scope].token
   }
 
   const authUrl = Deno.env.get('VALIDAPAY_AUTH_URL')
@@ -23,33 +22,36 @@ export async function getValidaPayToken(): Promise<string> {
       grant_type: 'client_credentials',
       client_id: clientId,
       client_secret: clientSecret,
-      scope: 'pix.cob/write pix.cob/read wallet/write wallet/read proposals/write subaccounts/read',
+      scope,
     }).toString(),
   })
 
   if (!res.ok) {
     const text = await res.text()
-    throw new Error(`ValidaPay auth falhou: ${res.status} — ${text}`)
+    throw new Error(`ValidaPay auth falhou (${res.status}): ${text}`)
   }
 
   const data = await res.json()
-  cachedToken = data.access_token
-  tokenExpiresAt = Date.now() + (data.expires_in ?? 3600) * 1000
+  cachedTokens[scope] = {
+    token: data.access_token,
+    expiresAt: Date.now() + (data.expires_in ?? 3600) * 1000,
+  }
 
-  return cachedToken!
+  return cachedTokens[scope].token
 }
 
 export async function validaPayFetch(
   path: string,
   options: RequestInit = {},
-  subAccountNumber?: string
+  subAccountNumber?: string,
+  scope: string = 'proposals/write'
 ): Promise<Response> {
   const baseUrl = Deno.env.get('VALIDAPAY_BASE_URL')
   if (!baseUrl) {
     throw new Error('VALIDAPAY_BASE_URL não configurada')
   }
 
-  const token = await getValidaPayToken()
+  const token = await getValidaPayToken(scope)
 
   const headers: Record<string, string> = {
     'Authorization': `Bearer ${token}`,

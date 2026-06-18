@@ -122,8 +122,9 @@ Deno.serve(async (req) => {
     const pixBody = {
       amount: valorBruto,
       split: [
-        // Apenas o split do freelancer é declarado como fixed.
-        // A conta master retém automaticamente o restante (≈ R$10 menos a taxa da Valida Pay).
+        // Split fixo para a conta master (taxa da plataforma)
+        { type: 'fixed', amount: taxaPlataforma },
+        // Split para a subconta do freelancer
         { type: 'fixed', accountNumber: freelancer.validapay_account_number, amount: valorLiquido },
       ],
       metadata: {

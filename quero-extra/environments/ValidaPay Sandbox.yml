@@ -1,0 +1,10 @@
+name: ValidaPay Sandbox
+variables:
+  - name: base_url
+    value: https://sandbox.validapay.com.br
+  - name: client_id
+    value: u8rn4vmbtk928q66tm2j7kkjn5ob7w
+  - name: client_secret
+    value: 7dVZ8wp12TJBsoqdVmLFVxngrwQmYuSAoMGWRk
+  - name: token
+    value: ""
