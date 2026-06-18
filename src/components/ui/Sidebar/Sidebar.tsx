@@ -26,7 +26,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </span>
               {role && (
                 <span className="text-[10px] font-bold text-qe-gray-400 uppercase tracking-[1.5px] leading-none">
-                  {role === 'empresa' ? 'Empresa' : 'Freelancer'}
+                  {role === 'empresa' ? 'Empresa' : 'Prestador'}
                 </span>
               )}
             </div>

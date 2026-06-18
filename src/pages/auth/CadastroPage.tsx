@@ -171,7 +171,7 @@ export default function CadastroPage() {
             <div className="space-y-2">
               <p className="text-[13px] font-semibold text-qe-gray-700">Eu sou:</p>
               <div className="flex gap-2">
-                <Chip label="Freelancer" variant="filter" selected />
+                <Chip label="Freelancer / Prestador" variant="filter" selected />
                 <Chip
                   label="Empresa"
                   variant="filter"

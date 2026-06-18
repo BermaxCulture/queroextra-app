@@ -59,11 +59,7 @@ function App() {
             <Route path="/email-confirmado" element={<EmailConfirmadoPage />} />
             <Route
               path="/cadastro/empresa/documentos"
-              element={
-                <GuestRoute>
-                  <CadastroEmpresaEtapa2Page />
-                </GuestRoute>
-              }
+              element={<CadastroEmpresaEtapa2Page />}
             />
             
             <Route path="/styles" element={<StylesPage />} />

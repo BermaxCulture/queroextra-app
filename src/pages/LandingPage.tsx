@@ -110,190 +110,190 @@ export default function LandingPage() {
         >
           {/* Content area */}
           <div className="relative flex-1 flex items-center px-6 sm:px-12 py-12">
-          <div className="w-full max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center">
-            {/* Left: copy — sobre o produto, não sobre um perfil */}
-            <motion.div
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              ref={heroRef as any}
-              variants={sectionVariants}
-              initial="hidden"
-              animate={heroInView ? 'visible' : 'hidden'}
-              className="flex flex-col items-center lg:items-start text-center lg:text-left"
-            >
-              {/* Tag pill */}
-              <div className="flex justify-center lg:justify-start mb-6">
-                <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-qe-pill bg-qe-white border border-qe-gray-200 text-[11px] font-bold tracking-[0.8px] uppercase text-qe-gray-700 font-sans shadow-qe-sm">
-                  🍽 FOOD SERVICE · BRASIL
-                </span>
-              </div>
-
-              {/* Headline */}
-              <h1 className="font-bold text-qe-gray-900 leading-[1.05] tracking-[-2px] mb-6 font-sans" style={{ fontSize: 'clamp(32px, 5vw, 52px)' }}>
-                A plataforma de
-                <br />
-                trabalho extra para
-                <br />
-                o{' '}
-                <span className="text-qe-yellow">food service.</span>
-              </h1>
-
-              {/* Subtitle */}
-              <p className="text-[15px] md:text-[17px] text-qe-gray-500 leading-relaxed max-w-md font-sans mb-8">
-                Conectamos profissionais autônomos a restaurantes, buffets e eventos na sua cidade. Rápido,
-                seguro e com pagamento garantido.
-              </p>
-
-              {/* CTAs */}
-              <div className="flex flex-col sm:flex-row gap-3">
-                <Link to="/para-freelancers" className="w-full sm:w-auto">
-                  <Button variant="primary" size="lg" className="sm:w-auto sm:min-w-[220px]">
-                    Quero trabalhar →
-                  </Button>
-                </Link>
-                <Link to="/para-empresas" className="w-full sm:w-auto">
-                  <Button variant="secondary" size="lg" className="sm:w-auto sm:min-w-[160px]">
-                    Sou empresa
-                  </Button>
-                </Link>
-              </div>
-            </motion.div>
-
-            {/* Right: phone mockup — CSS only */}
-            {/* TODO: substituir por carrossel de screenshots quando disponível */}
-            <div className="flex justify-center lg:justify-end">
-              {/* Wrapper responsivo: 70% no mobile, tamanho original no desktop */}
-              <div className="relative w-[168px] h-[350px] lg:w-[240px] lg:h-[500px]">
-              <div className="absolute inset-0 origin-top-left scale-[0.7] lg:scale-100">
-              <div style={{ width: '240px', height: '500px', position: 'relative' }}>
-                {/* Phone shell */}
-                <div
-                  style={{
-                    position: 'absolute',
-                    inset: 0,
-                    backgroundColor: 'var(--qe-gray-900)',
-                    borderRadius: '40px',
-                    padding: '10px',
-                    boxShadow: '0 24px 60px rgba(0,0,0,0.22), 0 8px 20px rgba(0,0,0,0.12)',
-                  }}
-                >
-                  {/* Volume buttons — left side */}
-                  <div
-                    style={{
-                      position: 'absolute',
-                      left: '-3px',
-                      top: '90px',
-                      width: '3px',
-                      height: '28px',
-                      backgroundColor: 'var(--qe-gray-700)',
-                      borderRadius: '2px 0 0 2px',
-                    }}
-                  />
-                  <div
-                    style={{
-                      position: 'absolute',
-                      left: '-3px',
-                      top: '130px',
-                      width: '3px',
-                      height: '28px',
-                      backgroundColor: 'var(--qe-gray-700)',
-                      borderRadius: '2px 0 0 2px',
-                    }}
-                  />
-                  {/* Power button — right side */}
-                  <div
-                    style={{
-                      position: 'absolute',
-                      right: '-3px',
-                      top: '110px',
-                      width: '3px',
-                      height: '50px',
-                      backgroundColor: 'var(--qe-gray-700)',
-                      borderRadius: '0 2px 2px 0',
-                    }}
-                  />
-
-                  {/* Screen */}
-                  <div
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      backgroundColor: 'var(--qe-yellow-subtle)',
-                      borderRadius: '32px',
-                      overflow: 'hidden',
-                      position: 'relative',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '12px',
-                    }}
-                  >
-                    {/* Notch */}
-                    <div
-                      style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: '50%',
-                        transform: 'translateX(-50%)',
-                        width: '80px',
-                        height: '24px',
-                        backgroundColor: 'var(--qe-gray-900)',
-                        borderRadius: '0 0 14px 14px',
-                        zIndex: 10,
-                      }}
-                    />
-
-                    {/* Logo */}
-                    <img
-                      src={boneco}
-                      alt=""
-                      aria-hidden="true"
-                      style={{ width: '80px', height: 'auto', marginTop: '16px' }}
-                    />
-                    <div
-                      style={{
-                        fontSize: '18px',
-                        fontWeight: 700,
-                        fontFamily: 'var(--qe-font)',
-                        letterSpacing: '-0.3px',
-                      }}
-                    >
-                      <span style={{ color: 'var(--qe-navy)' }}>Quero</span>
-                      <span style={{ color: 'var(--qe-yellow)' }}>Extra</span>
-                    </div>
-
-                    {/* Em breve */}
-                    <span
-                      style={{
-                        color: 'var(--qe-gray-400)',
-                        fontSize: '11px',
-                        fontFamily: 'var(--qe-font)',
-                        letterSpacing: '0.5px',
-                        textTransform: 'uppercase',
-                        textAlign: 'center',
-                        paddingLeft: '12px',
-                        paddingRight: '12px',
-                        lineHeight: '1.4',
-                      }}
-                    >
-                      Em breve imagens do app
-                    </span>
-                  </div>
+            <div className="w-full max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center">
+              {/* Left: copy — sobre o produto, não sobre um perfil */}
+              <motion.div
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                ref={heroRef as any}
+                variants={sectionVariants}
+                initial="hidden"
+                animate={heroInView ? 'visible' : 'hidden'}
+                className="flex flex-col items-center lg:items-start text-center lg:text-left"
+              >
+                {/* Tag pill */}
+                <div className="flex justify-center lg:justify-start mb-6">
+                  <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-qe-pill bg-qe-white border border-qe-gray-200 text-[11px] font-bold tracking-[0.8px] uppercase text-qe-gray-700 font-sans shadow-qe-sm">
+                    🍽 FOOD SERVICE · BRASIL
+                  </span>
                 </div>
-              </div>
-              </div>{/* end scale wrapper */}
-              </div>{/* end size wrapper */}
-            </div>
-          </div>
 
-          {/* Scroll indicator */}
-          <motion.div
-            className="absolute bottom-6 left-1/2 -translate-x-1/2"
-            animate={{ y: [0, 8, 0] }}
-            transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
-          >
-            <ChevronDown size={24} className="text-qe-gray-400" />
-          </motion.div>
+                {/* Headline */}
+                <h1 className="font-bold text-qe-gray-900 leading-[1.05] tracking-[-2px] mb-6 font-sans" style={{ fontSize: 'clamp(32px, 5vw, 52px)' }}>
+                  A plataforma de
+                  <br />
+                  trabalho extra para
+                  <br />
+                  o{' '}
+                  <span className="text-qe-yellow">food service.</span>
+                </h1>
+
+                {/* Subtitle */}
+                <p className="text-[15px] md:text-[17px] text-qe-gray-500 leading-relaxed max-w-md font-sans mb-8">
+                  Conectamos profissionais autônomos a restaurantes, buffets e eventos na sua cidade. Rápido,
+                  seguro e com pagamento garantido.
+                </p>
+
+                {/* CTAs */}
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <Link to="/para-freelancers" className="w-full sm:w-auto">
+                    <Button variant="primary" size="lg" className="sm:w-auto sm:min-w-[220px]">
+                      Quero trabalhar →
+                    </Button>
+                  </Link>
+                  <Link to="/para-empresas" className="w-full sm:w-auto">
+                    <Button variant="secondary" size="lg" className="sm:w-auto sm:min-w-[160px]">
+                      Sou empresa
+                    </Button>
+                  </Link>
+                </div>
+              </motion.div>
+
+              {/* Right: phone mockup — CSS only */}
+              {/* TODO: substituir por carrossel de screenshots quando disponível */}
+              <div className="flex justify-center lg:justify-end">
+                {/* Wrapper responsivo: 70% no mobile, tamanho original no desktop */}
+                <div className="relative w-[168px] h-[350px] lg:w-[240px] lg:h-[500px]">
+                  <div className="absolute inset-0 origin-top-left scale-[0.7] lg:scale-100">
+                    <div style={{ width: '240px', height: '500px', position: 'relative' }}>
+                      {/* Phone shell */}
+                      <div
+                        style={{
+                          position: 'absolute',
+                          inset: 0,
+                          backgroundColor: 'var(--qe-gray-900)',
+                          borderRadius: '40px',
+                          padding: '10px',
+                          boxShadow: '0 24px 60px rgba(0,0,0,0.22), 0 8px 20px rgba(0,0,0,0.12)',
+                        }}
+                      >
+                        {/* Volume buttons — left side */}
+                        <div
+                          style={{
+                            position: 'absolute',
+                            left: '-3px',
+                            top: '90px',
+                            width: '3px',
+                            height: '28px',
+                            backgroundColor: 'var(--qe-gray-700)',
+                            borderRadius: '2px 0 0 2px',
+                          }}
+                        />
+                        <div
+                          style={{
+                            position: 'absolute',
+                            left: '-3px',
+                            top: '130px',
+                            width: '3px',
+                            height: '28px',
+                            backgroundColor: 'var(--qe-gray-700)',
+                            borderRadius: '2px 0 0 2px',
+                          }}
+                        />
+                        {/* Power button — right side */}
+                        <div
+                          style={{
+                            position: 'absolute',
+                            right: '-3px',
+                            top: '110px',
+                            width: '3px',
+                            height: '50px',
+                            backgroundColor: 'var(--qe-gray-700)',
+                            borderRadius: '0 2px 2px 0',
+                          }}
+                        />
+
+                        {/* Screen */}
+                        <div
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            backgroundColor: 'var(--qe-yellow-subtle)',
+                            borderRadius: '32px',
+                            overflow: 'hidden',
+                            position: 'relative',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '12px',
+                          }}
+                        >
+                          {/* Notch */}
+                          <div
+                            style={{
+                              position: 'absolute',
+                              top: 0,
+                              left: '50%',
+                              transform: 'translateX(-50%)',
+                              width: '80px',
+                              height: '24px',
+                              backgroundColor: 'var(--qe-gray-900)',
+                              borderRadius: '0 0 14px 14px',
+                              zIndex: 10,
+                            }}
+                          />
+
+                          {/* Logo */}
+                          <img
+                            src={boneco}
+                            alt=""
+                            aria-hidden="true"
+                            style={{ width: '80px', height: 'auto', marginTop: '16px' }}
+                          />
+                          <div
+                            style={{
+                              fontSize: '18px',
+                              fontWeight: 700,
+                              fontFamily: 'var(--qe-font)',
+                              letterSpacing: '-0.3px',
+                            }}
+                          >
+                            <span style={{ color: 'var(--qe-navy)' }}>Quero</span>
+                            <span style={{ color: 'var(--qe-yellow)' }}>Extra</span>
+                          </div>
+
+                          {/* Em breve */}
+                          <span
+                            style={{
+                              color: 'var(--qe-gray-400)',
+                              fontSize: '11px',
+                              fontFamily: 'var(--qe-font)',
+                              letterSpacing: '0.5px',
+                              textTransform: 'uppercase',
+                              textAlign: 'center',
+                              paddingLeft: '12px',
+                              paddingRight: '12px',
+                              lineHeight: '1.4',
+                            }}
+                          >
+                            Em breve imagens do app
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>{/* end scale wrapper */}
+                </div>{/* end size wrapper */}
+              </div>
+            </div>
+
+            {/* Scroll indicator */}
+            <motion.div
+              className="absolute bottom-6 left-1/2 -translate-x-1/2"
+              animate={{ y: [0, 8, 0] }}
+              transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+            >
+              <ChevronDown size={24} className="text-qe-gray-400" />
+            </motion.div>
           </div>{/* end content wrapper */}
 
           {/* Stats bar — rodapé do hero */}
@@ -304,7 +304,7 @@ export default function LandingPage() {
             style={{ backgroundColor: 'var(--qe-navy)' }}
           >
             <div className="max-w-4xl mx-auto flex flex-row justify-around items-center">
-              <StatItem value={2400} suffix="+" label="Freelancers" isInView={statsInView} />
+              <StatItem value={2400} suffix="+" label="Freelancers / Prestadores" isInView={statsInView} />
               <div className="w-px h-8 sm:h-10" style={{ backgroundColor: 'var(--qe-gray-700)' }} />
               <StatItem value={340} suffix="+" label="Empresas" isInView={statsInView} />
               <div className="w-px h-8 sm:h-10" style={{ backgroundColor: 'var(--qe-gray-700)' }} />
@@ -383,11 +383,11 @@ export default function LandingPage() {
                   className="inline-flex items-center justify-center font-bold font-sans rounded-qe-pill px-8 min-h-[52px] w-full sm:w-auto sm:min-w-[220px] transition-colors text-[16px]"
                   style={{ backgroundColor: 'var(--qe-black)', color: 'var(--qe-white)' }}
                   onMouseEnter={e => {
-                    ;(e.currentTarget as HTMLButtonElement).style.backgroundColor =
+                    ; (e.currentTarget as HTMLButtonElement).style.backgroundColor =
                       'var(--qe-gray-900)'
                   }}
                   onMouseLeave={e => {
-                    ;(e.currentTarget as HTMLButtonElement).style.backgroundColor =
+                    ; (e.currentTarget as HTMLButtonElement).style.backgroundColor =
                       'var(--qe-black)'
                   }}
                 >
@@ -618,7 +618,7 @@ export default function LandingPage() {
             </h2>
 
             {/* Subtitle */}
-            <p className="text-[16px] mb-10 leading-relaxed font-sans" style={{ color: 'var(--qe-gray-400)' }}>
+            <p className="text-[16px] mb-10 leading-relaxed font-sans text-white/80">
               Mais de 2.400 profissionais e 340 empresas
               <br className="hidden sm:block" />
               já estão na plataforma.
@@ -639,11 +639,11 @@ export default function LandingPage() {
                   color: 'var(--qe-white)',
                 }}
                 onMouseEnter={e => {
-                  ;(e.currentTarget as HTMLAnchorElement).style.backgroundColor =
+                  ; (e.currentTarget as HTMLAnchorElement).style.backgroundColor =
                     'rgba(255,255,255,0.1)'
                 }}
                 onMouseLeave={e => {
-                  ;(e.currentTarget as HTMLAnchorElement).style.backgroundColor = 'transparent'
+                  ; (e.currentTarget as HTMLAnchorElement).style.backgroundColor = 'transparent'
                 }}
               >
                 Sou empresa

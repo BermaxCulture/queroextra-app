@@ -55,71 +55,74 @@ export default function VagaDetalhesPage() {
   const [existingApp, setExistingApp] = React.useState<{ id: string; status: string } | null>(null)
   const [applying, setApplying] = React.useState(false)
 
-  // Carregar dados da vaga e status de candidatura
-  const loadJobDetails = React.useCallback(async () => {
+  // Buscar dados públicos da vaga (independente de auth)
+  React.useEffect(() => {
     if (!id) return
-    try {
-      setLoading(true)
-
-      // Buscar detalhes do job
-      const { data, error } = await supabase
-        .from('jobs')
-        .select('*, companies(id, profiles(id, nome, avatar_url))')
-        .eq('id', id)
-        .maybeSingle()
-
-      if (error) throw error
-      const jobData = data as unknown as JobDetails
-
-      // Buscar média de avaliações da empresa
-      if (jobData?.companies?.profiles?.id) {
-        const { data: revs } = await supabase
-          .from('reviews')
-          .select('nota')
-          .eq('avaliado_id', jobData.companies.profiles.id)
-          .eq('status', 'enviada')
-
-        if (revs && revs.length > 0) {
-          const sum = revs.reduce((acc, r) => acc + r.nota, 0)
-          jobData.companies.profiles.avaliacao = parseFloat((sum / revs.length).toFixed(1))
-        } else {
-          jobData.companies.profiles.avaliacao = 0
-        }
-      }
-
-      setJob(jobData)
-
-      // Se o freelancer estiver logado, verificar se ele já se candidatou
-      if (freelancer?.id) {
-        const { data: appData, error: appError } = await supabase
-          .from('applications')
-          .select('id, status')
-          .eq('job_id', id)
-          .eq('freelancer_id', freelancer.id)
+    const fetchJob = async () => {
+      try {
+        setLoading(true)
+        const { data, error } = await supabase
+          .from('jobs')
+          .select('*, companies(id, profiles(id, nome, avatar_url))')
+          .eq('id', id)
           .maybeSingle()
 
-        if (appError) throw appError
-        if (appData) {
-          setExistingApp(appData as { id: string; status: string })
-        }
-      }
-    } catch (err: any) {
-      const msg = err?.message || err?.details || (typeof err === 'object' ? JSON.stringify(err) : String(err))
-      console.error('Erro detalhado ao carregar detalhes da vaga:', err)
-      showToast(`Erro ao carregar vaga: ${msg}`, 'error')
-    } finally {
-      setLoading(false)
-    }
-  }, [id, freelancer, showToast])
+        if (error) throw error
+        const jobData = data as unknown as JobDetails
 
+        if (jobData?.companies?.profiles?.id) {
+          const { data: revs } = await supabase
+            .from('reviews')
+            .select('nota')
+            .eq('avaliado_id', jobData.companies.profiles.id)
+            .eq('status', 'enviada')
+
+          if (revs && revs.length > 0) {
+            const sum = revs.reduce((acc, r) => acc + r.nota, 0)
+            jobData.companies.profiles.avaliacao = parseFloat((sum / revs.length).toFixed(1))
+          } else {
+            jobData.companies.profiles.avaliacao = 0
+          }
+        }
+
+        setJob(jobData)
+      } catch (err: any) {
+        const msg = err?.message || err?.details || (typeof err === 'object' ? JSON.stringify(err) : String(err))
+        console.error('Erro ao carregar detalhes da vaga:', err)
+        showToast(`Erro ao carregar vaga: ${msg}`, 'error')
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchJob()
+  }, [id, showToast])
+
+  // Verificar candidatura existente (só quando freelancer estiver disponível)
   React.useEffect(() => {
-    loadJobDetails()
-  }, [loadJobDetails])
+    if (!id || !freelancer?.id) return
+    const checkApp = async () => {
+      const { data: appData, error: appError } = await supabase
+        .from('applications')
+        .select('id, status')
+        .eq('job_id', id)
+        .eq('freelancer_id', freelancer.id)
+        .maybeSingle()
+
+      if (!appError && appData) {
+        setExistingApp(appData as { id: string; status: string })
+      }
+    }
+    checkApp()
+  }, [id, freelancer?.id])
 
   // Enviar Candidatura
   const handleApply = async () => {
     if (!id || !freelancer?.id) {
       showToast('Faça login como freelancer para se candidatar.', 'error')
+      return
+    }
+    if (freelancer.validapay_onboarding_status !== 'aprovado') {
+      showToast('Configure sua conta de repasse antes de se candidatar.', 'error')
       return
     }
 
@@ -232,6 +235,21 @@ export default function VagaDetalhesPage() {
   )
 
   const renderApplyButton = (className: string) => {
+    // Bloqueia candidatura se onboarding não aprovado (UX — RLS faz o bloqueio real no banco)
+    if (!freelancer?.validapay_onboarding_status || freelancer.validapay_onboarding_status !== 'aprovado') {
+      const isPending = freelancer?.validapay_onboarding_status === 'em_analise'
+      return (
+        <Button
+          variant="secondary"
+          disabled
+          size="lg"
+          className={`border-qe-yellow/40 text-qe-gray-400 pointer-events-none font-bold ${className}`}
+        >
+          {isPending ? 'Aguardando aprovação da conta ⏳' : 'Configure sua conta para se candidatar'}
+        </Button>
+      )
+    }
+
     if (existingApp && existingApp.status === 'rejeitado') {
       return (
         <Button
@@ -348,13 +366,13 @@ export default function VagaDetalhesPage() {
           <section className="bg-white rounded-qe-md border border-qe-gray-200 p-5 space-y-4 shadow-qe-sm">
             <div>
               <h2 className="text-[16px] font-bold text-qe-gray-900 mb-2">Descrição do Extra</h2>
-              <p className="text-[14px] text-qe-gray-600 leading-relaxed">
+              <p className="text-[14px] text-qe-gray-600 leading-relaxed break-words">
                 {job.descricao || 'Nenhuma descrição fornecida para este extra.'}
               </p>
             </div>
             <div>
               <h2 className="text-[16px] font-bold text-qe-gray-900 mb-2">Beneficios</h2>
-              <p className="text-[14px] text-qe-gray-600 leading-relaxed">
+              <p className="text-[14px] text-qe-gray-600 leading-relaxed break-words">
                 {job.beneficios || 'Nenhuma descrição fornecida para este extra.'}
               </p>
             </div>

@@ -344,14 +344,14 @@ export default function PerfilPage({ customProfileId }: PerfilPageProps) {
               <div className="relative">
                 <Avatar
                   src={avatarUrl}
-                  name={nome || 'Freelancer'}
+                  name={nome || 'Prestador'}
                   size="xl"
                   className="ring-4 ring-white shadow-qe-md"
                 />
               </div>
               <div>
                 <h2 className="text-h2 font-bold text-qe-gray-955 flex items-center justify-center gap-1">
-                  {nome || 'Freelancer'}
+                  {nome || 'Prestador'}
                 </h2>
                 {/* Nota e Avaliações */}
                 <div className="flex items-center justify-center gap-1.5 mt-1">

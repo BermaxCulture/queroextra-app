@@ -101,7 +101,7 @@ export default function VerificarEmailPage() {
 
         {/* quantidade de digitos  */}
         <InputOTP
-          length={8}
+          length={6}
           autoFocus
           disabled={loading}
           onComplete={handleVerify}
