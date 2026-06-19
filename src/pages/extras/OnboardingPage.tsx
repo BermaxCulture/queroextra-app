@@ -13,8 +13,13 @@ import {
   CheckCircle2,
   X,
   ChevronUp,
+  ChevronDown,
   AlertCircle,
+  Copy,
+  Check,
+  FileText,
 } from 'lucide-react'
+import { QRCodeSVG } from 'qrcode.react'
 import { Input, Button, Select, useToast, Modal } from '@/components/ui'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
@@ -544,12 +549,20 @@ function OnboardingMiniBadge({ onExpand }: { onExpand: () => void }) {
   )
 }
 
-// ─── Mini badge flutuante para KYC (em_analise) ──────────────────────────────
+// ─── KYC Pending Badge ───────────────────────────────────────────────────────
 
-function KycMiniBadge({ urlDocumentscopy }: { urlDocumentscopy: string | null }) {
+function KycPendingBadge({ url }: { url: string }) {
+  const [expanded, setExpanded] = useState(false)
+  const [copied, setCopied] = useState(false)
   const [dismissed, setDismissed] = useState(false)
 
-  if (dismissed || !urlDocumentscopy) return null
+  if (dismissed) return null
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(url)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   return (
     <AnimatePresence>
@@ -558,36 +571,89 @@ function KycMiniBadge({ urlDocumentscopy }: { urlDocumentscopy: string | null })
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 20, scale: 0.95 }}
         transition={{ type: 'spring', stiffness: 400, damping: 28 }}
-        className="fixed bottom-20 right-4 z-[9997] lg:bottom-6"
+        className="fixed bottom-20 right-4 z-[9997] lg:bottom-6 w-[280px]"
       >
-        <div className="bg-qe-white rounded-qe-lg shadow-qe-lg border border-qe-gray-200 w-[260px] overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 bg-qe-yellow">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 size={16} className="text-qe-black" />
-              <span className="text-[13px] font-bold text-qe-black">Validação Pendente</span>
-            </div>
+        <div className="bg-qe-white rounded-qe-lg shadow-qe-lg border border-qe-gray-200 overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 bg-amber-50 border-b border-amber-200">
+            <button
+              onClick={() => setExpanded((v) => !v)}
+              className="flex items-center gap-2 flex-1 text-left"
+            >
+              <FileText size={15} className="text-amber-600 shrink-0" />
+              <span className="text-[13px] font-bold text-amber-800">Envie seus documentos</span>
+              {expanded
+                ? <ChevronDown size={14} className="text-amber-600 ml-auto" />
+                : <ChevronUp size={14} className="text-amber-600 ml-auto" />
+              }
+            </button>
             <button
               onClick={() => setDismissed(true)}
-              className="text-qe-black/50 hover:text-qe-black transition-colors"
+              className="text-amber-400 hover:text-amber-700 transition-colors ml-2"
               aria-label="Fechar"
             >
               <X size={15} />
             </button>
           </div>
-          <div className="px-4 py-3 space-y-3">
-            <p className="text-[12px] text-qe-gray-500 leading-snug">
-              Envie seus documentos para aprovar sua conta e receber por vagas.
-            </p>
-            <a
-              href={urlDocumentscopy}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-between w-full text-[13px] font-semibold text-qe-black hover:text-qe-yellow-text transition-colors"
-            >
-              <span>Enviar documentos</span>
-              <ExternalLink size={16} />
-            </a>
-          </div>
+
+          {/* Body colapsável */}
+          <AnimatePresence>
+            {expanded && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden"
+              >
+                <div className="px-4 py-4 space-y-4">
+                  <p className="text-[12px] text-qe-gray-500 leading-snug">
+                    Escaneie o QR Code ou copie o link para enviar seus documentos e validar sua conta.
+                  </p>
+
+                  {/* QR Code */}
+                  <div className="flex justify-center">
+                    <div className="bg-white p-2 rounded-qe-md border border-qe-gray-200 inline-block">
+                      <QRCodeSVG value={url} size={140} />
+                    </div>
+                  </div>
+
+                  {/* Botões */}
+                  <div className="flex gap-2">
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 flex items-center justify-center gap-1.5 h-9 bg-qe-yellow text-qe-black text-[13px] font-semibold rounded-qe-pill hover:bg-qe-yellow-hover transition-colors"
+                    >
+                      <ExternalLink size={13} />
+                      Abrir link
+                    </a>
+                    <button
+                      onClick={handleCopy}
+                      className="flex items-center justify-center gap-1.5 h-9 px-3 border border-qe-gray-200 text-qe-gray-600 text-[13px] rounded-qe-pill hover:bg-qe-gray-50 transition-colors"
+                    >
+                      {copied ? <Check size={13} className="text-green-500" /> : <Copy size={13} />}
+                      {copied ? 'Copiado' : 'Copiar'}
+                    </button>
+                  </div>
+
+                  <p className="text-[11px] text-qe-gray-400 text-center leading-snug">
+                    Aprovação em até 24h após o envio dos documentos.
+                  </p>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Preview collapsed */}
+          {!expanded && (
+            <div className="px-4 py-3">
+              <p className="text-[12px] text-qe-gray-500 leading-snug">
+                Falta só enviar os documentos para ativar sua conta.
+              </p>
+            </div>
+          )}
         </div>
       </motion.div>
     </AnimatePresence>
@@ -611,7 +677,9 @@ export default function OnboardingModal() {
   }
 
   if (freelancer.validapay_onboarding_status === 'em_analise') {
-    return <KycMiniBadge urlDocumentscopy={freelancer.validapay_url_documentscopy ?? null} />
+    return freelancer.validapay_url_documentscopy
+      ? <KycPendingBadge url={freelancer.validapay_url_documentscopy} />
+      : null
   }
 
   const handleClose = () => setOpen(false)

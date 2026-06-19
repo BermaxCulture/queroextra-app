@@ -144,11 +144,6 @@ Deno.serve(async (req) => {
 
     const proposal = await proposalRes.json()
 
-    // Salva o formId para acompanhar o status
-    await supabase.from('freelancers').update({
-      validapay_form_id: proposal.formId,
-    }).eq('id', freelancer.id)
-
     // Busca o status da proposta para obter a URL de KYC
     const statusRes = await validaPayFetch(`/v1/proposals/${proposal.formId}`)
     let urlDocumentscopy: string | null = null
@@ -158,11 +153,11 @@ Deno.serve(async (req) => {
       urlDocumentscopy = statusData?.proposalStatus?.urlDocumentscopy ?? null
     }
 
-    if (urlDocumentscopy) {
-      await supabase.from('freelancers').update({
-        validapay_url_documentscopy: urlDocumentscopy,
-      }).eq('id', freelancer.id)
-    }
+    // Salva formId e URL de KYC em um único update
+    await supabase.from('freelancers').update({
+      validapay_form_id: proposal.formId,
+      validapay_url_documentscopy: urlDocumentscopy,
+    }).eq('id', freelancer.id)
 
     return json({
       ok: true,
