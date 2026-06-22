@@ -54,6 +54,15 @@ Deno.serve(async (req) => {
       return json({ error: 'Tipo de chave PIX inválido' }, 400)
     }
 
+    // V-05: Whitelist dos valores aceitos para dados financeiros
+    const RENDA_VALIDOS = ['1DINP01', '1DINP02', '1DINP03', '1DINP04', '1DINP05']
+    const OCUPACAO_VALIDOS = ['ONP01', 'ONP02', 'ONP03', 'ONP04', 'ONP05', 'ONP06', 'ONP07', 'ONP08', 'ONP09', 'ONP10']
+    const PATRIMONIO_VALIDOS = ['NWNP01', 'NWNP02', 'NWNP03', 'NWNP04', 'NWNP05']
+
+    if (!RENDA_VALIDOS.includes(faixa_renda)) return json({ error: 'Faixa de renda inválida' }, 400)
+    if (!OCUPACAO_VALIDOS.includes(ocupacao)) return json({ error: 'Ocupação inválida' }, 400)
+    if (!PATRIMONIO_VALIDOS.includes(faixa_patrimonio)) return json({ error: 'Faixa patrimonial inválida' }, 400)
+
     // Busca perfil + freelancer do usuário autenticado
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
@@ -103,6 +112,25 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const webhookUrl = `${supabaseUrl}/functions/v1/validapay-webhook`
 
+    // Converte DD-MM-YYYY → YYYY-MM-DD (formato exigido pela Valida Pay)
+    const [dd, mm, yyyy] = data_nascimento.split('-')
+    const birthDateISO = `${yyyy}-${mm}-${dd}`
+
+    // Mapeia códigos internos para valores reais (API Valida Pay exige valores decimais e texto livre)
+    const RENDA_MAP: Record<string, string> = {
+      '1DINP01': '1000.00', '1DINP02': '2250.00', '1DINP03': '4000.00',
+      '1DINP04': '7500.00', '1DINP05': '15000.00',
+    }
+    const OCUPACAO_MAP: Record<string, string> = {
+      'ONP01': 'Assalariado CLT', 'ONP02': 'Autônomo', 'ONP03': 'Profissional Liberal',
+      'ONP04': 'Empresário', 'ONP05': 'Servidor Público', 'ONP06': 'Aposentado',
+      'ONP07': 'Trabalhador Rural', 'ONP08': 'MEI', 'ONP09': 'Estudante', 'ONP10': 'Outros',
+    }
+    const PATRIMONIO_MAP: Record<string, string> = {
+      'NWNP01': '2500.00', 'NWNP02': '12500.00', 'NWNP03': '60000.00',
+      'NWNP04': '200000.00', 'NWNP05': '500000.00',
+    }
+
     const proposalRes = await validaPayFetch('/v1/proposals', {
       method: 'POST',
       body: JSON.stringify({
@@ -111,7 +139,7 @@ Deno.serve(async (req) => {
         email: profile.email,
         fullName: profile.nome,
         socialName: '',
-        birthDate: data_nascimento,           // formato: "DD-MM-YYYY"
+        birthDate: birthDateISO,
         motherName: nome_mae,
         isPoliticallyExposedPerson: pessoa_politicamente_exposta ?? false,
         address: {
@@ -124,9 +152,9 @@ Deno.serve(async (req) => {
           state: estado,
         },
         financialDetails: {
-          declaredIncome: faixa_renda,
-          occupation: ocupacao,
-          netWorth: faixa_patrimonio,
+          declaredIncome: RENDA_MAP[faixa_renda] ?? faixa_renda,
+          occupation: OCUPACAO_MAP[ocupacao] ?? ocupacao,
+          netWorth: PATRIMONIO_MAP[faixa_patrimonio] ?? faixa_patrimonio,
         },
         webhookUrl,
       }),
