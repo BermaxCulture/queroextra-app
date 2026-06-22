@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -113,6 +113,7 @@ const OCUPACAO_OPTIONS = [
   { value: 'ONP29', label: 'Estudante (Sem Renda Própria)' },
   { value: 'ONP30', label: 'Autônomo' },
   { value: 'ONP31', label: 'Outros' },
+  { value: 'ONP32', label: 'Arquiteto(a)' },
 ]
 
 const PATRIMONIO_OPTIONS = [
@@ -278,9 +279,11 @@ function StepEndereco({ onNext }: { onNext: (data: AddressData) => void }) {
         />
       </div>
 
-      <Button type="submit" size="lg" trailingIcon={<ArrowRight size={20} />}>
-        Próximo
-      </Button>
+      <div className="sticky bottom-0 bg-qe-white pt-3">
+        <Button type="submit" size="lg" trailingIcon={<ArrowRight size={20} />}>
+          Próximo
+        </Button>
+      </div>
     </form>
   )
 }
@@ -370,6 +373,7 @@ function StepFinanceiro({
       <Select
         label="Ocupação"
         placeholder="Selecione..."
+        searchable
         options={OCUPACAO_OPTIONS}
         value={ocupacao}
         onChange={(val) => setValue('ocupacao', val, { shouldValidate: true })}
@@ -422,26 +426,28 @@ function StepFinanceiro({
         </p>
       </div>
 
-      <div className="flex gap-3">
-        <Button
-          type="button"
-          variant="secondary"
-          size="lg"
-          leadingIcon={<ArrowLeft size={20} />}
-          onClick={onBack}
-          className="flex-1"
-        >
-          Voltar
-        </Button>
-        <Button
-          type="submit"
-          size="lg"
-          loading={loading}
-          trailingIcon={!loading ? <ArrowRight size={20} /> : undefined}
-          className="flex-[2]"
-        >
-          Enviar
-        </Button>
+      <div className="sticky bottom-0 bg-qe-white pt-3">
+        <div className="flex gap-3">
+          <Button
+            type="button"
+            variant="secondary"
+            size="lg"
+            leadingIcon={<ArrowLeft size={20} />}
+            onClick={onBack}
+            className="flex-1"
+          >
+            Voltar
+          </Button>
+          <Button
+            type="submit"
+            size="lg"
+            loading={loading}
+            trailingIcon={!loading ? <ArrowRight size={20} /> : undefined}
+            className="flex-[2]"
+          >
+            Enviar
+          </Button>
+        </div>
       </div>
     </form>
   )
@@ -475,15 +481,23 @@ function StepKyc({
       </div>
 
       {urlDocumentscopy ? (
-        <a
-          href={urlDocumentscopy}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center justify-center gap-2 w-full h-[52px] bg-qe-yellow text-qe-black font-semibold text-[16px] rounded-qe-pill hover:bg-qe-yellow-hover transition-colors"
-        >
-          <ExternalLink size={18} />
-          Enviar documentos
-        </a>
+        <>
+          <div className="flex justify-center">
+            <div className="bg-white p-3 rounded-qe-md border border-qe-gray-200 inline-block">
+              <QRCodeSVG value={urlDocumentscopy} size={148} />
+            </div>
+          </div>
+
+          <a
+            href={urlDocumentscopy}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center gap-2 w-full h-[52px] bg-qe-yellow text-qe-black font-semibold text-[16px] rounded-qe-pill hover:bg-qe-yellow-hover transition-colors"
+          >
+            <ExternalLink size={18} />
+            Enviar documentos
+          </a>
+        </>
       ) : (
         <p className="text-[12px] text-qe-gray-500 bg-qe-yellow-subtle/50 border border-qe-yellow/20 rounded-qe-md p-3">
           Estamos processando seu cadastro. O link para envio dos documentos será gerado em instantes.<br/><br/>
@@ -664,7 +678,13 @@ function KycPendingBadge({ url }: { url: string }) {
 
 export default function OnboardingModal() {
   const { freelancer, refreshFreelancer } = useAuth()
-  const [open, setOpen] = useState(freelancer?.validapay_onboarding_status === null)
+  const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    if (freelancer?.validapay_onboarding_status === null) {
+      setOpen(true)
+    }
+  }, [freelancer?.validapay_onboarding_status])
   const [step, setStep] = useState(1)
   const [addressData, setAddressData] = useState<AddressData | null>(null)
   const [urlDocumentscopy, setUrlDocumentscopy] = useState<string | null>(null)
@@ -707,7 +727,6 @@ export default function OnboardingModal() {
       if (!result?.ok) throw new Error(result?.error ?? 'Erro ao criar subconta')
 
       setUrlDocumentscopy(result.urlDocumentscopy ?? null)
-      await refreshFreelancer()
       setStep(3)
     } catch (err: any) {
       showToast(`Não foi possível criar sua conta: ${err?.message ?? 'Erro desconhecido'}`, 'error')
@@ -716,9 +735,14 @@ export default function OnboardingModal() {
     }
   }
 
+  const handleStep3Close = async () => {
+    setOpen(false)
+    await refreshFreelancer()
+  }
+
   return (
     <>
-      <Modal open={open} onClose={handleClose} title="Configurar conta de repasse">
+      <Modal open={open} onClose={handleStep3Close} title="Configurar conta de repasse">
         <StepIndicator current={step} total={3} />
 
         {step === 1 && <StepEndereco onNext={handleAddressNext} />}
@@ -730,7 +754,7 @@ export default function OnboardingModal() {
           />
         )}
         {step === 3 && (
-          <StepKyc urlDocumentscopy={urlDocumentscopy} onClose={handleClose} />
+          <StepKyc urlDocumentscopy={urlDocumentscopy} onClose={handleStep3Close} />
         )}
       </Modal>
 

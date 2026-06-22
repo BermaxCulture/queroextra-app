@@ -55,8 +55,8 @@ Deno.serve(async (req) => {
     }
 
     // V-05: Whitelist dos valores aceitos para dados financeiros
-    const RENDA_VALIDOS = ['1DINP01', '1DINP02', '1DINP03', '1DINP04', '1DINP05']
-    const OCUPACAO_VALIDOS = ['ONP01', 'ONP02', 'ONP03', 'ONP04', 'ONP05', 'ONP06', 'ONP07', 'ONP08', 'ONP09', 'ONP10']
+    const RENDA_VALIDOS = ['DINP01', 'DINP02', 'DINP03', 'DINP04', 'DINP05']
+    const OCUPACAO_VALIDOS = Array.from({ length: 32 }, (_, i) => `ONP${String(i + 1).padStart(2, '0')}`)
     const PATRIMONIO_VALIDOS = ['NWNP01', 'NWNP02', 'NWNP03', 'NWNP04', 'NWNP05']
 
     if (!RENDA_VALIDOS.includes(faixa_renda)) return json({ error: 'Faixa de renda inválida' }, 400)
@@ -118,17 +118,24 @@ Deno.serve(async (req) => {
 
     // Mapeia códigos internos para valores reais (API Valida Pay exige valores decimais e texto livre)
     const RENDA_MAP: Record<string, string> = {
-      '1DINP01': '1000.00', '1DINP02': '2250.00', '1DINP03': '4000.00',
-      '1DINP04': '7500.00', '1DINP05': '15000.00',
+      'DINP01': '2500.00', 'DINP02': '7500.00', 'DINP03': '20000.00',
+      'DINP04': '65000.00', 'DINP05': '150000.00',
     }
     const OCUPACAO_MAP: Record<string, string> = {
-      'ONP01': 'Assalariado CLT', 'ONP02': 'Autônomo', 'ONP03': 'Profissional Liberal',
-      'ONP04': 'Empresário', 'ONP05': 'Servidor Público', 'ONP06': 'Aposentado',
-      'ONP07': 'Trabalhador Rural', 'ONP08': 'MEI', 'ONP09': 'Estudante', 'ONP10': 'Outros',
+      'ONP01': 'Administrador', 'ONP02': 'Vendedor', 'ONP03': 'Analista de RH',
+      'ONP04': 'Analista Financeiro', 'ONP05': 'Desenvolvedor', 'ONP06': 'Marketing',
+      'ONP07': 'Médico', 'ONP08': 'Professor', 'ONP09': 'Engenheiro', 'ONP10': 'Advogado',
+      'ONP11': 'Auxiliar de Serviços Gerais', 'ONP12': 'Pedreiro', 'ONP13': 'Motorista',
+      'ONP14': 'Recepcionista', 'ONP15': 'Técnico', 'ONP16': 'Designer',
+      'ONP17': 'Operador de Máquinas', 'ONP18': 'Consultor', 'ONP19': 'Cabeleireiro',
+      'ONP20': 'Vigilante', 'ONP21': 'Trabalhador Rural', 'ONP22': 'Hoteleiro',
+      'ONP23': 'Jornalista', 'ONP24': 'Psicólogo', 'ONP25': 'Servidor Público',
+      'ONP26': 'Pesquisador', 'ONP27': 'Artesão', 'ONP28': 'Aposentado',
+      'ONP29': 'Estudante', 'ONP30': 'Autônomo', 'ONP31': 'Outros', 'ONP32': 'Arquiteto',
     }
     const PATRIMONIO_MAP: Record<string, string> = {
-      'NWNP01': '2500.00', 'NWNP02': '12500.00', 'NWNP03': '60000.00',
-      'NWNP04': '200000.00', 'NWNP05': '500000.00',
+      'NWNP01': '25000.00', 'NWNP02': '125000.00', 'NWNP03': '600000.00',
+      'NWNP04': '3000000.00', 'NWNP05': '10000000.00',
     }
 
     const proposalRes = await validaPayFetch('/v1/proposals', {

@@ -1,6 +1,6 @@
 import * as React from 'react'
 import * as ReactDOM from 'react-dom'
-import { ChevronDown, Check } from 'lucide-react'
+import { ChevronDown, Check, Search } from 'lucide-react'
 import type { SelectProps } from './Select.types'
 
 export const Select = React.forwardRef<HTMLDivElement, SelectProps>(
@@ -17,15 +17,18 @@ export const Select = React.forwardRef<HTMLDivElement, SelectProps>(
       disabled,
       name,
       id,
+      searchable = false,
     },
     ref
   ) => {
     const [open, setOpen] = React.useState(false)
+    const [search, setSearch] = React.useState('')
     const [dropdownStyle, setDropdownStyle] = React.useState<React.CSSProperties>({})
 
     const containerRef = React.useRef<HTMLDivElement>(null)
     const buttonRef    = React.useRef<HTMLButtonElement>(null)
     const listRef      = React.useRef<HTMLUListElement>(null)
+    const searchRef    = React.useRef<HTMLInputElement>(null)
 
     const inputId     = id ?? React.useId()
     const listId      = `${inputId}-list`
@@ -34,6 +37,10 @@ export const Select = React.forwardRef<HTMLDivElement, SelectProps>(
 
     const selected = options.find((opt) => opt.value === value)
     const hasError = !!errorMessage
+
+    const filteredOptions = searchable && search
+      ? options.filter((opt) => opt.label.toLowerCase().includes(search.toLowerCase()))
+      : options
 
     // Calcula a posição do dropdown com base no botão trigger
     const updatePosition = React.useCallback(() => {
@@ -50,7 +57,11 @@ export const Select = React.forwardRef<HTMLDivElement, SelectProps>(
 
     const handleToggle = () => {
       if (disabled) return
-      if (!open) updatePosition()
+      if (!open) {
+        updatePosition()
+        setSearch('')
+        setTimeout(() => searchRef.current?.focus(), 50)
+      }
       setOpen((prev) => !prev)
     }
 
@@ -99,36 +110,60 @@ export const Select = React.forwardRef<HTMLDivElement, SelectProps>(
       : 'border-qe-gray-200 hover:border-qe-gray-300'
 
     const dropdown = (
-      <ul
-        ref={listRef}
-        id={listId}
-        role="listbox"
-        aria-label={label}
+      <div
         style={dropdownStyle}
-        className="bg-qe-white border border-qe-gray-200 rounded-qe-md shadow-qe-md overflow-hidden max-h-56 overflow-y-auto py-1"
+        className="bg-qe-white border border-qe-gray-200 rounded-qe-md shadow-qe-md overflow-hidden"
       >
-        {options.map((opt) => {
-          const isActive = opt.value === value
-          return (
-            <li
-              key={opt.value}
-              role="option"
-              aria-selected={isActive}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => handleSelect(opt.value)}
-              className={[
-                'flex items-center justify-between px-3.5 py-2.5 cursor-pointer text-[15px] font-sans transition-colors select-none',
-                isActive
-                  ? 'bg-qe-yellow-subtle text-qe-gray-900 font-semibold'
-                  : 'text-qe-gray-700 hover:bg-qe-gray-50',
-              ].join(' ')}
-            >
-              <span>{opt.label}</span>
-              {isActive && <Check size={15} className="text-qe-yellow-text shrink-0" />}
+        {searchable && (
+          <div className="px-2 pt-2 pb-1 border-b border-qe-gray-100">
+            <div className="flex items-center gap-2 bg-qe-gray-50 rounded-qe-sm px-2.5 h-9">
+              <Search size={14} className="text-qe-gray-400 shrink-0" />
+              <input
+                ref={searchRef}
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onMouseDown={(e) => e.stopPropagation()}
+                placeholder="Buscar..."
+                className="flex-1 bg-transparent text-[14px] text-qe-gray-900 outline-none placeholder:text-qe-gray-400"
+              />
+            </div>
+          </div>
+        )}
+        <ul
+          ref={listRef}
+          id={listId}
+          role="listbox"
+          aria-label={label}
+          className="max-h-52 overflow-y-auto py-1"
+        >
+          {filteredOptions.length === 0 ? (
+            <li className="px-3.5 py-2.5 text-[14px] text-qe-gray-400 text-center">
+              Nenhuma opção encontrada
             </li>
-          )
-        })}
-      </ul>
+          ) : filteredOptions.map((opt) => {
+            const isActive = opt.value === value
+            return (
+              <li
+                key={opt.value}
+                role="option"
+                aria-selected={isActive}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => handleSelect(opt.value)}
+                className={[
+                  'flex items-center justify-between px-3.5 py-2.5 cursor-pointer text-[15px] font-sans transition-colors select-none',
+                  isActive
+                    ? 'bg-qe-yellow-subtle text-qe-gray-900 font-semibold'
+                    : 'text-qe-gray-700 hover:bg-qe-gray-50',
+                ].join(' ')}
+              >
+                <span>{opt.label}</span>
+                {isActive && <Check size={15} className="text-qe-yellow-text shrink-0" />}
+              </li>
+            )
+          })}
+        </ul>
+      </div>
     )
 
     return (

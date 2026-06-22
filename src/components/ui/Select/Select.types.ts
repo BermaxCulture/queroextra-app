@@ -15,4 +15,5 @@ export interface SelectProps {
   disabled?: boolean
   name?: string
   id?: string
+  searchable?: boolean
 }
