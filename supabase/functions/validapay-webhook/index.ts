@@ -11,16 +11,8 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Verifica authToken configurado ao registrar o webhook na Valida Pay
-    const webhookSecret = Deno.env.get('VALIDAPAY_WEBHOOK_SECRET')
-    if (webhookSecret) {
-      const authHeader = req.headers.get('Authorization') ?? ''
-      const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader
-      if (token !== webhookSecret) {
-        console.error('[validapay-webhook] Assinatura inválida')
-        return json({ error: 'Assinatura inválida' }, 401)
-      }
-    }
+    // Auth desabilitada: webhooks por proposta não suportam authToken na Valida Pay
+    // Reativar quando migrar para registro global de webhook com authToken
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,

@@ -260,59 +260,31 @@ ALTER TABLE transactions
 
 ---
 
-### US-07 — Checkout confirmado: master libera saque da subconta para chave PIX do freelancer
+### US-07 — Checkout confirmado: liberar saldo para saque do freelancer
 
-**Como** plataforma, **quero** que ao confirmar o checkout a master libere automaticamente o saque da subconta do freelancer para a chave PIX cadastrada **para** que o dinheiro caia na conta bancária dele sem intervenção manual.
+**Como** plataforma, **quero** que ao confirmar o checkout o pagamento seja marcado como disponível para saque **para** que o freelancer possa sacar quando quiser pela carteira.
 
-**Endpoints Valida Pay utilizados:**
-- `POST {{base_url}}/v1/wallet/withdraw` — saque da subconta do freelancer para chave PIX de mesma titularidade
+> ℹ️ **Modelo revisado:** Não há transferência automática pós-checkout. O checkout marca o pagamento como `liberado` no nosso banco — o freelancer acumula saldo e decide quando sacar via CarteirePage. O saque efetivo para o PIX acontece na US-08.
 
 **O que implementar:**
 
-**Trigger + Edge Function `release-payment/index.ts`:**
+**Trigger no banco (`trg_liberar_pagamento_no_checkout`):**
+- Dispara em `AFTER UPDATE ON checkins` quando `tipo = 'checkout'` e `confirmado_em` é preenchido pela primeira vez
+- Atualiza diretamente `transactions.status = 'liberado'` onde `application_id = NEW.application_id` e `status = 'retido'`
+- Sem chamada de Edge Function — tudo resolvido no banco com segurança
 
-Fluxo de segurança interno (ordem importa):
-1. Recebe `{ application_id }` — chamado pelo trigger via `service_role_key`
-2. Busca `transaction` do banco: valida `status = 'retido'` E `paid_at IS NOT NULL`
-3. **Se `status != 'retido'` → aborta** (idempotência — previne double spend)
-4. Busca do banco: `freelancer.validapay_account_number`, `freelancer.pix_key`, `freelancer.pix_key_type` — **NUNCA do body**
-5. Calcula `valor_liquido = job.valor - 10.00`
-6. Chama `POST /v1/wallet/withdraw` com `X-Idempotency-Key: transaction.idempotency_key`:
-   ```json
-   {
-     "amount": valor_liquido,
-     "pixKey": freelancer.pix_key,
-     "pixKeyType": freelancer.pix_key_type,
-     "accountId": freelancer.validapay_account_number
-   }
-   ```
-   > A Valida Pay valida que a chave PIX pertence ao mesmo CPF da subconta (`accountId`). O master controla o timing — freelancer não tem API credentials para sacar sozinho.
-7. Atualiza `transactions.status = 'liberado'` + `gateway_payment_id` **somente após** confirmação
-8. Falha na API: mantém `status = 'retido'` + log de erro para retry
-
-**Segurança anti-vulnerabilidade (crítico):**
-- `pix_key`, `pix_key_type`, `validapay_account_number` sempre do banco — nunca do request body
-- Double spend impossível: check no banco + `X-Idempotency-Key` na API
-- `status = 'liberado'` gravado **após** confirmação (não otimista)
-- Edge Function só chamável com `service_role_key` (trigger do banco) — não exposta ao frontend
-
-**Migrations/triggers necessários:**
 ```sql
-CREATE OR REPLACE FUNCTION trigger_release_payment_on_checkout()
+CREATE OR REPLACE FUNCTION fn_liberar_pagamento_no_checkout()
 RETURNS trigger AS $$
 BEGIN
   IF NEW.tipo = 'checkout'
     AND NEW.confirmado_em IS NOT NULL
     AND OLD.confirmado_em IS NULL
   THEN
-    PERFORM net.http_post(
-      url := current_setting('app.supabase_url') || '/functions/v1/release-payment',
-      headers := jsonb_build_object(
-        'Content-Type', 'application/json',
-        'Authorization', 'Bearer ' || current_setting('app.service_role_key')
-      ),
-      body := jsonb_build_object('application_id', NEW.application_id)
-    );
+    UPDATE transactions
+    SET status = 'liberado', liberado_em = now()
+    WHERE application_id = NEW.application_id
+      AND status = 'retido';
   END IF;
   RETURN NEW;
 END;
@@ -320,41 +292,97 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 CREATE TRIGGER trg_liberar_pagamento_no_checkout
   AFTER UPDATE ON checkins
-  FOR EACH ROW EXECUTE FUNCTION trigger_release_payment_on_checkout();
+  FOR EACH ROW EXECUTE FUNCTION fn_liberar_pagamento_no_checkout();
+```
+
+**Segurança:**
+- Trigger roda com `SECURITY DEFINER` — não pode ser chamado pelo frontend
+- Só atualiza se `status = 'retido'` — idempotente, sem double-spend
+- Só dispara uma vez: condição `OLD.confirmado_em IS NULL` garante isso
+
+**Migrations necessárias:**
+```sql
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS liberado_em timestamptz;
 ```
 
 **Critérios de aceite:**
-- [ ] Checkout confirmado dispara Edge Function automaticamente
-- [ ] `wallet/withdraw` chamado com `accountId` da subconta + `pixKey` do banco (nunca do request)
-- [ ] `status = 'liberado'` + `gateway_payment_id` após confirmação da Valida Pay
-- [ ] Segunda chamada com mesmo `application_id` não gera segundo pagamento (idempotente)
-- [ ] Falha mantém `status = 'retido'` + log de erro
-- [ ] Trigger não dispara em check-ins e não dispara se `confirmado_em` já preenchido
+- [ ] Checkout confirmado muda `transactions.status` de `retido` → `liberado`
+- [ ] `liberado_em` preenchido com timestamp da confirmação
+- [ ] Segunda confirmação do mesmo checkout não altera nada (idempotente)
+- [ ] Trigger não dispara em check-ins (`tipo != 'checkout'`)
+- [ ] Frontend não consegue acionar diretamente
 
-**Estimativa:** G
+**Estimativa:** P
 **Prioridade:** Alta
 
 ---
 
-### US-08 — Tela de carteira do freelancer (histórico de transações)
+### US-08 — Carteira do freelancer: saldo disponível e saque via PIX
 
-**Como** freelancer, **quero** ver meu histórico de pagamentos **para** acompanhar meus ganhos na plataforma.
+**Como** freelancer, **quero** ver meu saldo disponível e solicitar saque para minha chave PIX **para** receber os pagamentos acumulados quando quiser.
+
+**Endpoints Valida Pay utilizados:**
+- `POST {{base_url}}/v1/wallet/withdraw` — saque da subconta para chave PIX de mesma titularidade
 
 **O que implementar:**
-- Substituir mock em `CarteiraPage.tsx`:
-  - Histórico de transações via `supabase.from('transactions')` (RLS garante isolamento)
-  - Status visual: `retido` (amarelo — "Aguardando conclusão do serviço") / `liberado` (verde — "Pago via PIX") / `estornado` (cinza — "Cancelado")
-  - Nome da empresa e vaga, valor líquido, data
-  - Banner se `validapay_onboarding_status !== 'aprovado'`
 
+**Frontend — `CarteiraPage.tsx`:**
+- Histórico de transações via `supabase.from('transactions')` (RLS garante isolamento)
+- Status visual:
+  - `retido` → amarelo — "Aguardando conclusão do serviço"
+  - `liberado` → verde — "Disponível para saque"
+  - `sacado` → azul — "Pago via PIX"
+  - `estornado` → cinza — "Cancelado"
+- Saldo disponível = soma das transações com `status = 'liberado'`
+- **Botão "Sacar tudo"** (visível se saldo > 0): chama Edge Function `request-withdrawal`
+- Banner se `validapay_onboarding_status !== 'aprovado'`
+
+**Backend — Edge Function `request-withdrawal/index.ts`:**
+1. Freelancer autenticado via JWT (`auth.uid()`)
+2. Busca todas as `transactions` com `status = 'liberado'` do freelancer
+3. Valida que há saldo disponível
+4. Busca do banco: `freelancer.validapay_account_number`, `pix_key`, `pix_key_type` — **nunca do body**
+5. Chama `POST /v1/wallet/withdraw` com `X-Idempotency-Key`:
+   ```json
+   { "accountId": validapay_account_number, "pixKey": pix_key }
+   ```
+   > A Valida Pay transfere o saldo disponível da subconta para a chave PIX de mesma titularidade (CPF)
+6. Atualiza `transactions.status = 'sacado'` **somente após** confirmação da API
+7. Falha: mantém `status = 'liberado'` + log de erro
+
+**Segurança:**
+- `accountId`, `pix_key`, `pix_key_type` sempre do banco — nunca aceitos do frontend
+- Freelancer só acessa suas próprias transactions (RLS + JWT)
+- `status = 'sacado'` gravado após confirmação (não otimista)
+
+**Migrations necessárias:**
 ```sql
+ALTER TABLE transactions
+  ADD COLUMN IF NOT EXISTS liberado_em timestamptz,
+  DROP CONSTRAINT IF EXISTS transactions_status_check,
+  ADD CONSTRAINT transactions_status_check
+    CHECK (status IN ('pendente', 'retido', 'liberado', 'sacado', 'estornado'));
+
 ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "read_own_transactions" ON transactions
-  FOR SELECT USING (freelancer_id = auth.uid() OR empresa_id = auth.uid());
+  FOR SELECT USING (
+    application_id IN (
+      SELECT id FROM applications WHERE freelancer_id = (
+        SELECT id FROM freelancers WHERE profile_id = auth.uid()
+      )
+    )
+  );
 ```
 
-**Estimativa:** M
-**Prioridade:** Média
+**Critérios de aceite:**
+- [ ] Saldo disponível calculado corretamente (soma de `liberado`)
+- [ ] Botão "Sacar" aparece só se saldo > 0 e subconta aprovada
+- [ ] `wallet/withdraw` chamado com dados do banco (nunca do frontend)
+- [ ] Após saque: `status = 'sacado'` e saldo zerado na tela
+- [ ] Falha na API não muda status das transactions
+
+**Estimativa:** G
+**Prioridade:** Alta
 
 ---
 
@@ -366,8 +394,9 @@ CREATE POLICY "read_own_transactions" ON transactions
 | Taxa da plataforma | R$ 10,00 fixo, retida na master via split |
 | Modelo de pagamento | Split na cobrança + escrow via subconta |
 | Quando o split ocorre | No momento do pagamento PIX pela empresa |
-| Quando o freelancer recebe | Após checkout confirmado (master chama `wallet/withdraw`) |
-| Quem controla o saque | Apenas a master — freelancer não tem API credentials |
+| Quando o pagamento é liberado | Após checkout confirmado (trigger atualiza `status = 'liberado'`) |
+| Quando o freelancer recebe | Quando ele solicitar saque na CarteirePage (chama `wallet/withdraw`) |
+| Quem controla o saque | Freelancer solicita via app; Edge Function chama a API com dados do banco |
 | Pré-requisito para candidatura | `validapay_onboarding_status = 'aprovado'` (RLS + frontend) |
 
 ---
@@ -407,7 +436,7 @@ CREATE POLICY "read_own_transactions" ON transactions
 | `create-pix-charge` | US-04 | Pendente |
 | `check-pix-status` | US-05 | Pendente |
 | `cancel-pix-charge` | US-05 | Pendente |
-| `release-payment` | US-07 | Pendente |
+| `request-withdrawal` | US-08 | Pendente |
 
 ---
 

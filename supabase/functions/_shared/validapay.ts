@@ -23,7 +23,7 @@ export async function getValidaPayToken(): Promise<string> {
       grant_type: 'client_credentials',
       client_id: clientId,
       client_secret: clientSecret,
-      scope: 'pix.cob/write pix.cob/read wallet/write wallet/read proposals/write subaccounts/read',
+      scope: 'pix.cob/write pix.cob/read wallet/write wallet/read proposals/write proposals/read subaccounts/read',
     }).toString(),
   })
 

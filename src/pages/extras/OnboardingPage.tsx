@@ -18,6 +18,7 @@ import {
   Copy,
   Check,
   FileText,
+  HelpCircle,
 } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { Input, Button, Select, useToast, Modal } from '@/components/ui'
@@ -46,7 +47,7 @@ const financialSchema = z.object({
   faixa_patrimonio: z.string().min(1, 'Selecione sua faixa patrimonial'),
   pessoa_politicamente_exposta: z.boolean().optional(),
   pix_key_type: z.enum(['cpf', 'telefone', 'email', 'chave_aleatoria'], {
-    required_error: 'Selecione o tipo de chave PIX',
+    error: 'Selecione o tipo de chave PIX',
   }),
   pix_key: z.string().min(1, 'Informe sua chave PIX'),
 }).superRefine((data, ctx) => {
@@ -288,6 +289,46 @@ function StepEndereco({ onNext }: { onNext: (data: AddressData) => void }) {
   )
 }
 
+// ─── Tooltip PEP ─────────────────────────────────────────────────────────────
+
+function PepTooltip() {
+  const [visible, setVisible] = useState(false)
+
+  return (
+    <div className="relative inline-flex" onClick={(e) => e.preventDefault()}>
+      <button
+        type="button"
+        onMouseEnter={() => setVisible(true)}
+        onMouseLeave={() => setVisible(false)}
+        onFocus={() => setVisible(true)}
+        onBlur={() => setVisible(false)}
+        onClick={() => setVisible((v) => !v)}
+        className="text-qe-gray-400 hover:text-qe-gray-600 transition-colors"
+        aria-label="O que é PEP?"
+      >
+        <HelpCircle size={14} />
+      </button>
+
+      {visible && (
+        <div className="absolute bottom-full right-0 mb-2 z-50 w-[210px]">
+          <div className="bg-qe-gray-900 text-white text-[12px] leading-relaxed rounded-qe-md px-3 py-2.5 shadow-qe-lg">
+            <p className="font-semibold mb-1">O que é PEP?</p>
+            <p>
+              Pessoa Politicamente Exposta é quem ocupa ou ocupou nos últimos 5 anos
+              cargo público relevante — como político, juiz, militar de alta patente
+              ou diretor de empresa estatal.
+            </p>
+          </div>
+          {/* Setinha alinhada à direita */}
+          <div className="flex justify-end pr-1.5">
+            <div className="w-2 h-2 bg-qe-gray-900 rotate-45 -mt-1" />
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Step 2: Dados financeiros + Chave PIX ───────────────────────────────────
 
 function StepFinanceiro({
@@ -395,9 +436,12 @@ function StepFinanceiro({
           onChange={(e) => setValue('pessoa_politicamente_exposta', e.target.checked)}
           className="mt-1 h-4 w-4 rounded border-qe-gray-300 accent-qe-yellow"
         />
-        <span className="text-[13px] text-qe-gray-600 leading-snug">
-          Sou Pessoa Politicamente Exposta (PEP)
-        </span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[13px] text-qe-gray-600 leading-snug">
+            Sou Pessoa Politicamente Exposta (PEP)
+          </span>
+          <PepTooltip />
+        </div>
       </label>
 
       {/* Separador visual */}
@@ -565,17 +609,34 @@ function OnboardingMiniBadge({ onExpand }: { onExpand: () => void }) {
 
 // ─── KYC Pending Badge ───────────────────────────────────────────────────────
 
+const IS_SANDBOX = import.meta.env.VITE_VALIDAPAY_ENV === 'sandbox'
+
 function KycPendingBadge({ url }: { url: string }) {
+  const { refreshFreelancer } = useAuth()
+  const { showToast } = useToast()
   const [expanded, setExpanded] = useState(false)
   const [copied, setCopied] = useState(false)
-  const [dismissed, setDismissed] = useState(false)
-
-  if (dismissed) return null
+  const [simulating, setSimulating] = useState(false)
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(url)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleSimulateApproval = async () => {
+    setSimulating(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('simulate-approval')
+      if (error) throw error
+      if (!data?.ok) throw new Error(data?.error ?? 'Erro ao simular aprovação')
+      showToast('Conta aprovada com sucesso! ✅', 'success')
+      await refreshFreelancer()
+    } catch (err: any) {
+      showToast(`Erro: ${err?.message ?? 'Tente novamente'}`, 'error')
+    } finally {
+      setSimulating(false)
+    }
   }
 
   return (
@@ -588,27 +649,18 @@ function KycPendingBadge({ url }: { url: string }) {
         className="fixed bottom-20 right-4 z-[9997] lg:bottom-6 w-[280px]"
       >
         <div className="bg-qe-white rounded-qe-lg shadow-qe-lg border border-qe-gray-200 overflow-hidden">
-          {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 bg-amber-50 border-b border-amber-200">
-            <button
-              onClick={() => setExpanded((v) => !v)}
-              className="flex items-center gap-2 flex-1 text-left"
-            >
-              <FileText size={15} className="text-amber-600 shrink-0" />
-              <span className="text-[13px] font-bold text-amber-800">Envie seus documentos</span>
-              {expanded
-                ? <ChevronDown size={14} className="text-amber-600 ml-auto" />
-                : <ChevronUp size={14} className="text-amber-600 ml-auto" />
-              }
-            </button>
-            <button
-              onClick={() => setDismissed(true)}
-              className="text-amber-400 hover:text-amber-700 transition-colors ml-2"
-              aria-label="Fechar"
-            >
-              <X size={15} />
-            </button>
-          </div>
+          {/* Header — só colapsa, não fecha */}
+          <button
+            onClick={() => setExpanded((v) => !v)}
+            className="flex items-center gap-2 w-full px-4 py-3 bg-amber-50 border-b border-amber-200 text-left"
+          >
+            <FileText size={15} className="text-amber-600 shrink-0" />
+            <span className="text-[13px] font-bold text-amber-800 flex-1">Envie seus documentos</span>
+            {expanded
+              ? <ChevronDown size={14} className="text-amber-600" />
+              : <ChevronUp size={14} className="text-amber-600" />
+            }
+          </button>
 
           {/* Body colapsável */}
           <AnimatePresence>
@@ -655,6 +707,16 @@ function KycPendingBadge({ url }: { url: string }) {
                   <p className="text-[11px] text-qe-gray-400 text-center leading-snug">
                     Aprovação em até 24h após o envio dos documentos.
                   </p>
+
+                  {IS_SANDBOX && (
+                    <button
+                      onClick={handleSimulateApproval}
+                      disabled={simulating}
+                      className="w-full h-9 text-[12px] font-semibold border-2 border-dashed border-amber-300 text-amber-700 rounded-qe-pill hover:bg-amber-50 transition-colors disabled:opacity-50"
+                    >
+                      {simulating ? 'Simulando...' : '🧪 Simular aprovação (sandbox)'}
+                    </button>
+                  )}
                 </div>
               </motion.div>
             )}
@@ -702,7 +764,6 @@ export default function OnboardingModal() {
       : null
   }
 
-  const handleClose = () => setOpen(false)
   const handleExpand = () => setOpen(true)
 
   const handleAddressNext = (data: AddressData) => {

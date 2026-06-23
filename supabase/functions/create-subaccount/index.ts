@@ -179,26 +179,36 @@ Deno.serve(async (req) => {
 
     const proposal = await proposalRes.json()
 
-    // Busca o status da proposta para obter a URL de KYC
-    const statusRes = await validaPayFetch(`/v1/proposals/${proposal.formId}`)
-    let urlDocumentscopy: string | null = null
-
-    if (statusRes.ok) {
-      const statusData = await statusRes.json()
-      urlDocumentscopy = statusData?.proposalStatus?.urlDocumentscopy ?? null
+    if (!proposal.formId) {
+      console.error('[create-subaccount] formId ausente:', JSON.stringify(proposal))
+      await supabase.from('freelancers').update({ validapay_onboarding_status: null }).eq('id', freelancer.id)
+      return json({ error: 'Resposta inválida da ValidaPay: formId ausente' }, 502)
     }
 
-    // Salva formId e URL de KYC em um único update
+    // Busca URL de KYC — em propostas UNFINISHED a API ainda retorna proposalStatus
+    // como objeto com urlDocumentscopy; tenta múltiplos paths por segurança
+    let urlDocumentscopy: string | null = null
+    try {
+      const statusRes = await validaPayFetch(`/v1/proposals/${proposal.formId}`)
+      if (statusRes.ok) {
+        const statusData = await statusRes.json()
+        console.log('[create-subaccount] GET proposal:', JSON.stringify(statusData))
+        urlDocumentscopy =
+          statusData?.proposalStatus?.urlDocumentscopy ??
+          statusData?.urlDocumentscopy ??
+          statusData?.data?.urlDocumentscopy ??
+          null
+      }
+    } catch (e) {
+      console.warn('[create-subaccount] Falha ao buscar URL de documentos:', e)
+    }
+
     await supabase.from('freelancers').update({
       validapay_form_id: proposal.formId,
       validapay_url_documentscopy: urlDocumentscopy,
     }).eq('id', freelancer.id)
 
-    return json({
-      ok: true,
-      formId: proposal.formId,
-      urlDocumentscopy,
-    })
+    return json({ ok: true, formId: proposal.formId, urlDocumentscopy })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido'
     console.error('[create-subaccount] Erro:', message)
