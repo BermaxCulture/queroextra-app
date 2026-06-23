@@ -54,6 +54,15 @@ Deno.serve(async (req) => {
       return json({ error: 'Tipo de chave PIX inválido' }, 400)
     }
 
+    // V-05: Whitelist dos valores aceitos para dados financeiros
+    const RENDA_VALIDOS = ['DINP01', 'DINP02', 'DINP03', 'DINP04', 'DINP05']
+    const OCUPACAO_VALIDOS = Array.from({ length: 32 }, (_, i) => `ONP${String(i + 1).padStart(2, '0')}`)
+    const PATRIMONIO_VALIDOS = ['NWNP01', 'NWNP02', 'NWNP03', 'NWNP04', 'NWNP05']
+
+    if (!RENDA_VALIDOS.includes(faixa_renda)) return json({ error: 'Faixa de renda inválida' }, 400)
+    if (!OCUPACAO_VALIDOS.includes(ocupacao)) return json({ error: 'Ocupação inválida' }, 400)
+    if (!PATRIMONIO_VALIDOS.includes(faixa_patrimonio)) return json({ error: 'Faixa patrimonial inválida' }, 400)
+
     // Busca perfil + freelancer do usuário autenticado
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
@@ -103,6 +112,32 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const webhookUrl = `${supabaseUrl}/functions/v1/validapay-webhook`
 
+    // Converte DD-MM-YYYY → YYYY-MM-DD (formato exigido pela Valida Pay)
+    const [dd, mm, yyyy] = data_nascimento.split('-')
+    const birthDateISO = `${yyyy}-${mm}-${dd}`
+
+    // Mapeia códigos internos para valores reais (API Valida Pay exige valores decimais e texto livre)
+    const RENDA_MAP: Record<string, string> = {
+      'DINP01': '2500.00', 'DINP02': '7500.00', 'DINP03': '20000.00',
+      'DINP04': '65000.00', 'DINP05': '150000.00',
+    }
+    const OCUPACAO_MAP: Record<string, string> = {
+      'ONP01': 'Administrador', 'ONP02': 'Vendedor', 'ONP03': 'Analista de RH',
+      'ONP04': 'Analista Financeiro', 'ONP05': 'Desenvolvedor', 'ONP06': 'Marketing',
+      'ONP07': 'Médico', 'ONP08': 'Professor', 'ONP09': 'Engenheiro', 'ONP10': 'Advogado',
+      'ONP11': 'Auxiliar de Serviços Gerais', 'ONP12': 'Pedreiro', 'ONP13': 'Motorista',
+      'ONP14': 'Recepcionista', 'ONP15': 'Técnico', 'ONP16': 'Designer',
+      'ONP17': 'Operador de Máquinas', 'ONP18': 'Consultor', 'ONP19': 'Cabeleireiro',
+      'ONP20': 'Vigilante', 'ONP21': 'Trabalhador Rural', 'ONP22': 'Hoteleiro',
+      'ONP23': 'Jornalista', 'ONP24': 'Psicólogo', 'ONP25': 'Servidor Público',
+      'ONP26': 'Pesquisador', 'ONP27': 'Artesão', 'ONP28': 'Aposentado',
+      'ONP29': 'Estudante', 'ONP30': 'Autônomo', 'ONP31': 'Outros', 'ONP32': 'Arquiteto',
+    }
+    const PATRIMONIO_MAP: Record<string, string> = {
+      'NWNP01': '25000.00', 'NWNP02': '125000.00', 'NWNP03': '600000.00',
+      'NWNP04': '3000000.00', 'NWNP05': '10000000.00',
+    }
+
     const proposalRes = await validaPayFetch('/v1/proposals', {
       method: 'POST',
       body: JSON.stringify({
@@ -111,7 +146,7 @@ Deno.serve(async (req) => {
         email: profile.email,
         fullName: profile.nome,
         socialName: '',
-        birthDate: data_nascimento,           // formato: "DD-MM-YYYY"
+        birthDate: birthDateISO,
         motherName: nome_mae,
         isPoliticallyExposedPerson: pessoa_politicamente_exposta ?? false,
         address: {
@@ -124,9 +159,9 @@ Deno.serve(async (req) => {
           state: estado,
         },
         financialDetails: {
-          declaredIncome: faixa_renda,
-          occupation: ocupacao,
-          netWorth: faixa_patrimonio,
+          declaredIncome: RENDA_MAP[faixa_renda] ?? faixa_renda,
+          occupation: OCUPACAO_MAP[ocupacao] ?? ocupacao,
+          netWorth: PATRIMONIO_MAP[faixa_patrimonio] ?? faixa_patrimonio,
         },
         webhookUrl,
       }),
@@ -144,31 +179,36 @@ Deno.serve(async (req) => {
 
     const proposal = await proposalRes.json()
 
-    // Salva o formId para acompanhar o status
+    if (!proposal.formId) {
+      console.error('[create-subaccount] formId ausente:', JSON.stringify(proposal))
+      await supabase.from('freelancers').update({ validapay_onboarding_status: null }).eq('id', freelancer.id)
+      return json({ error: 'Resposta inválida da ValidaPay: formId ausente' }, 502)
+    }
+
+    // Busca URL de KYC — em propostas UNFINISHED a API ainda retorna proposalStatus
+    // como objeto com urlDocumentscopy; tenta múltiplos paths por segurança
+    let urlDocumentscopy: string | null = null
+    try {
+      const statusRes = await validaPayFetch(`/v1/proposals/${proposal.formId}`)
+      if (statusRes.ok) {
+        const statusData = await statusRes.json()
+        console.log('[create-subaccount] GET proposal:', JSON.stringify(statusData))
+        urlDocumentscopy =
+          statusData?.proposalStatus?.urlDocumentscopy ??
+          statusData?.urlDocumentscopy ??
+          statusData?.data?.urlDocumentscopy ??
+          null
+      }
+    } catch (e) {
+      console.warn('[create-subaccount] Falha ao buscar URL de documentos:', e)
+    }
+
     await supabase.from('freelancers').update({
       validapay_form_id: proposal.formId,
+      validapay_url_documentscopy: urlDocumentscopy,
     }).eq('id', freelancer.id)
 
-    // Busca o status da proposta para obter a URL de KYC
-    const statusRes = await validaPayFetch(`/v1/proposals/${proposal.formId}`)
-    let urlDocumentscopy: string | null = null
-
-    if (statusRes.ok) {
-      const statusData = await statusRes.json()
-      urlDocumentscopy = statusData?.proposalStatus?.urlDocumentscopy ?? null
-    }
-
-    if (urlDocumentscopy) {
-      await supabase.from('freelancers').update({
-        validapay_url_documentscopy: urlDocumentscopy,
-      }).eq('id', freelancer.id)
-    }
-
-    return json({
-      ok: true,
-      formId: proposal.formId,
-      urlDocumentscopy,
-    })
+    return json({ ok: true, formId: proposal.formId, urlDocumentscopy })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido'
     console.error('[create-subaccount] Erro:', message)

@@ -1,155 +1,137 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '' // Usando Service Role para ignorar RLS no webhook
+    // Auth desabilitada: webhooks por proposta não suportam authToken na Valida Pay
+    // Reativar quando migrar para registro global de webhook com authToken
+
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     )
 
     const payload = await req.json()
-    console.log('Webhook recebido da ValidaPay:', JSON.stringify(payload, null, 2))
+    console.log('[validapay-webhook] Evento recebido:', JSON.stringify(payload, null, 2))
 
-    // 1. Aprovação de Subconta (account_approved)
-    if (payload.event === 'account_approved' && payload.status === 'CONFIRMED') {
+    const event = payload.event as string | undefined
+
+    // ── Aprovação de subconta ─────────────────────────────────────────────────
+    // NC-08: API nova usa 'onboarding.create'; mantém 'account_approved' para compatibilidade
+    const isAccountApproved =
+      (event === 'onboarding.create' || event === 'account_approved') &&
+      (payload.status === 'CONFIRMED' || payload.status === 'APPROVED')
+
+    if (isAccountApproved) {
       const formId = payload.formId
-      const accountNumber = payload.account?.account
+      // NC-08: campo varia por versão da API
+      const accountNumber = payload.account?.account ?? payload.accountNumber
 
       if (!formId || !accountNumber) {
-        throw new Error('Payload inválido: formId ou account.account ausente')
+        console.error('[validapay-webhook] Payload inválido para aprovação:', JSON.stringify(payload))
+        return json({ error: 'Payload inválido: formId ou accountNumber ausente' }, 400)
       }
 
-      // Atualiza o freelancer correspondente
-      const { data, error } = await supabaseClient
+      const { error } = await supabase
         .from('freelancers')
         .update({
           validapay_onboarding_status: 'aprovado',
-          validapay_account_number: accountNumber
+          validapay_account_number: accountNumber,
         })
         .eq('validapay_form_id', formId)
-        .select()
 
       if (error) {
-        console.error('Erro ao atualizar freelancer:', error)
-        throw error
+        console.error('[validapay-webhook] Erro ao aprovar freelancer:', error)
+        return json({ error: 'Erro interno ao processar aprovação' }, 500)
       }
 
-      console.log(`Freelancer aprovado! formId: ${formId}, Conta: ${accountNumber}`)
-      
-      return new Response(JSON.stringify({ message: 'Webhook account_approved processado com sucesso' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-      })
+      console.log(`[validapay-webhook] Freelancer aprovado — formId: ${formId}, conta: ${accountNumber}`)
+      return json({ message: 'Aprovação processada com sucesso' })
     }
 
-    // 2. Confirmação de Pagamento PIX (charge.paid)
-    if (payload.event === 'charge.paid' || (payload.event === 'charge.updated' && payload.status === 'PAID')) {
-      const chargeId = payload.chargeId || payload.id
-
-      if (!chargeId) {
-        throw new Error('Payload inválido: chargeId ausente')
-      }
-
-      // Atualiza a transação para retido
-      const { data: txData, error: txError } = await supabaseClient
-        .from('transactions')
-        .update({ status: 'retido' })
-        .eq('gateway_charge_id', chargeId)
-        .select('application_id')
-        .single()
-
-      if (txError) {
-        console.error('Erro ao atualizar transação para retido:', txError)
-        throw txError
-      }
-
-      // Atualiza a candidatura para aprovado
-      if (txData && txData.application_id) {
-        const { error: appError } = await supabaseClient
-          .from('applications')
-          .update({ status: 'aprovado' })
-          .eq('id', txData.application_id)
-
-        if (appError) {
-          console.error('Erro ao atualizar candidatura para aprovado:', appError)
-        }
-      }
-
-      console.log(`Pagamento confirmado! chargeId: ${chargeId}`)
-
-      return new Response(JSON.stringify({ message: 'Webhook charge.paid processado com sucesso' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-      })
-    }
-    // 3. Recebimento de Link de Documentos (onboarding.documentscopy)
-    if (payload.event === 'onboarding.documentscopy' && payload.data?.status === 'PENDING') {
-      const url = payload.data.url
-      const formId = payload.data.proposalId
+    // ── Link de documentos KYC ───────────────────────────────────────────────
+    if (event === 'onboarding.documentscopy') {
+      const url = payload.data?.url ?? payload.url
+      const formId = payload.data?.proposalId ?? payload.formId
 
       if (url && formId) {
-        const { error } = await supabaseClient
+        const { error } = await supabase
           .from('freelancers')
           .update({ validapay_url_documentscopy: url })
           .eq('validapay_form_id', formId)
 
         if (error) {
-          console.error('Erro ao salvar URL de documentos:', error)
-          throw error
+          console.error('[validapay-webhook] Erro ao salvar URL de documentos:', error)
+          return json({ error: 'Erro interno' }, 500)
         }
-        console.log(`URL de documentos salva para formId: ${formId}`)
-        return new Response(JSON.stringify({ message: 'Webhook documentscopy processado com sucesso' }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 200,
-        })
+
+        console.log(`[validapay-webhook] URL de documentos salva — formId: ${formId}`)
       }
+
+      return json({ message: 'Evento documentscopy processado' })
     }
 
-    // 4. Conta Criada (payload final sem event)
-    if (!payload.event && payload.formId && payload.accountNumber) {
-      const formId = payload.formId
-      const accountNumber = payload.accountNumber
+    // ── Pagamento PIX confirmado ──────────────────────────────────────────────
+    // NC-08: API nova usa 'payment.success'; mantém variantes antigas para compatibilidade
+    const isPaymentSuccess =
+      event === 'payment.success' ||
+      event === 'charge.paid' ||
+      (event === 'charge.updated' && payload.status === 'PAID')
 
-      const { error } = await supabaseClient
-        .from('freelancers')
-        .update({
-          validapay_onboarding_status: 'aprovado',
-          validapay_account_number: accountNumber
-        })
-        .eq('validapay_form_id', formId)
+    if (isPaymentSuccess) {
+      const chargeId = payload.chargeId ?? payload.id
 
-      if (error) {
-        console.error('Erro ao aprovar conta final:', error)
-        throw error
+      if (!chargeId) {
+        console.error('[validapay-webhook] chargeId ausente no payload de pagamento')
+        return json({ error: 'chargeId ausente' }, 400)
       }
-      
-      console.log(`Conta final aprovada! formId: ${formId}, Conta: ${accountNumber}`)
-      return new Response(JSON.stringify({ message: 'Webhook de conta criada processado com sucesso' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-      })
-    }
-    // Retorno padrão para eventos não mapeados ou não suportados ainda
-    return new Response(JSON.stringify({ message: 'Evento recebido, mas nenhuma ação mapeada foi executada' }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 200,
-    })
 
+      // Atualiza transaction para retido e registra paid_at
+      const { data: txData, error: txError } = await supabase
+        .from('transactions')
+        .update({ status: 'retido', paid_at: new Date().toISOString() })
+        .eq('gateway_charge_id', chargeId)
+        .select('application_id')
+        .maybeSingle()
+
+      if (txError) {
+        console.error('[validapay-webhook] Erro ao atualizar transação:', txError)
+        return json({ error: 'Erro interno' }, 500)
+      }
+
+      // Atualiza candidatura para aprovado
+      if (txData?.application_id) {
+        await supabase
+          .from('applications')
+          .update({ status: 'aprovado' })
+          .eq('id', txData.application_id)
+      }
+
+      console.log(`[validapay-webhook] Pagamento confirmado — chargeId: ${chargeId}`)
+      return json({ message: 'Pagamento processado com sucesso' })
+    }
+
+    // ── Evento não mapeado ────────────────────────────────────────────────────
+    console.log(`[validapay-webhook] Evento não mapeado: ${event}`)
+    return json({ message: `Evento '${event}' recebido mas sem ação mapeada` })
   } catch (error) {
-    console.error('Erro no webhook:', error.message)
-    return new Response(JSON.stringify({ error: error.message }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 400,
-    })
+    const message = error instanceof Error ? error.message : 'Erro desconhecido'
+    console.error('[validapay-webhook] Erro:', message)
+    return json({ error: message }, 500)
   }
 })
+
+function json(data: unknown, status = 200): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  })
+}

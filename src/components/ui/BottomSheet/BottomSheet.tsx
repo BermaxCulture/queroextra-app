@@ -1,4 +1,5 @@
 import * as React from 'react'
+import * as ReactDOM from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { BottomSheetProps } from './BottomSheet.types'
 
@@ -8,7 +9,9 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({ open, onClose, childre
     return () => { document.body.style.overflow = '' }
   }, [open])
 
-  return (
+  // Portal garante que o BottomSheet saia do contexto do Modal
+  // (framer-motion cria stacking context via transform, quebrando position:fixed)
+  return ReactDOM.createPortal(
     <AnimatePresence>
       {open && (
         <>
@@ -18,7 +21,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({ open, onClose, childre
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 bg-black/45 z-40"
+            className="fixed inset-0 bg-black/45 z-[9998]"
             onClick={onClose}
             aria-hidden="true"
           />
@@ -37,7 +40,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({ open, onClose, childre
             onDragEnd={(_: unknown, info: { offset: { y: number } }) => {
               if (info.offset.y > 80) onClose()
             }}
-            className="fixed bottom-0 left-0 right-0 z-50 bg-qe-white rounded-t-qe-lg max-h-[90vh] overflow-y-auto"
+            className="fixed bottom-0 left-0 right-0 z-[9999] bg-qe-white rounded-t-qe-lg max-h-[90vh] overflow-y-auto"
           >
             <div className="w-9 h-1 bg-qe-gray-200 rounded-full mx-auto mt-3 mb-5" aria-hidden="true" />
             {title && (
@@ -47,6 +50,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({ open, onClose, childre
           </motion.div>
         </>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   )
 }

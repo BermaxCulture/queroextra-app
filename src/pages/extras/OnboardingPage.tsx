@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -13,8 +13,14 @@ import {
   CheckCircle2,
   X,
   ChevronUp,
+  ChevronDown,
   AlertCircle,
+  Copy,
+  Check,
+  FileText,
+  HelpCircle,
 } from 'lucide-react'
+import { QRCodeSVG } from 'qrcode.react'
 import { Input, Button, Select, useToast, Modal } from '@/components/ui'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
@@ -41,7 +47,7 @@ const financialSchema = z.object({
   faixa_patrimonio: z.string().min(1, 'Selecione sua faixa patrimonial'),
   pessoa_politicamente_exposta: z.boolean().optional(),
   pix_key_type: z.enum(['cpf', 'telefone', 'email', 'chave_aleatoria'], {
-    required_error: 'Selecione o tipo de chave PIX',
+    error: 'Selecione o tipo de chave PIX',
   }),
   pix_key: z.string().min(1, 'Informe sua chave PIX'),
 }).superRefine((data, ctx) => {
@@ -108,6 +114,7 @@ const OCUPACAO_OPTIONS = [
   { value: 'ONP29', label: 'Estudante (Sem Renda Própria)' },
   { value: 'ONP30', label: 'Autônomo' },
   { value: 'ONP31', label: 'Outros' },
+  { value: 'ONP32', label: 'Arquiteto(a)' },
 ]
 
 const PATRIMONIO_OPTIONS = [
@@ -273,10 +280,52 @@ function StepEndereco({ onNext }: { onNext: (data: AddressData) => void }) {
         />
       </div>
 
-      <Button type="submit" size="lg" trailingIcon={<ArrowRight size={20} />}>
-        Próximo
-      </Button>
+      <div className="sticky bottom-0 bg-qe-white pt-3">
+        <Button type="submit" size="lg" trailingIcon={<ArrowRight size={20} />}>
+          Próximo
+        </Button>
+      </div>
     </form>
+  )
+}
+
+// ─── Tooltip PEP ─────────────────────────────────────────────────────────────
+
+function PepTooltip() {
+  const [visible, setVisible] = useState(false)
+
+  return (
+    <div className="relative inline-flex" onClick={(e) => e.preventDefault()}>
+      <button
+        type="button"
+        onMouseEnter={() => setVisible(true)}
+        onMouseLeave={() => setVisible(false)}
+        onFocus={() => setVisible(true)}
+        onBlur={() => setVisible(false)}
+        onClick={() => setVisible((v) => !v)}
+        className="text-qe-gray-400 hover:text-qe-gray-600 transition-colors"
+        aria-label="O que é PEP?"
+      >
+        <HelpCircle size={14} />
+      </button>
+
+      {visible && (
+        <div className="absolute bottom-full right-0 mb-2 z-50 w-[210px]">
+          <div className="bg-qe-gray-900 text-white text-[12px] leading-relaxed rounded-qe-md px-3 py-2.5 shadow-qe-lg">
+            <p className="font-semibold mb-1">O que é PEP?</p>
+            <p>
+              Pessoa Politicamente Exposta é quem ocupa ou ocupou nos últimos 5 anos
+              cargo público relevante — como político, juiz, militar de alta patente
+              ou diretor de empresa estatal.
+            </p>
+          </div>
+          {/* Setinha alinhada à direita */}
+          <div className="flex justify-end pr-1.5">
+            <div className="w-2 h-2 bg-qe-gray-900 rotate-45 -mt-1" />
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -365,6 +414,7 @@ function StepFinanceiro({
       <Select
         label="Ocupação"
         placeholder="Selecione..."
+        searchable
         options={OCUPACAO_OPTIONS}
         value={ocupacao}
         onChange={(val) => setValue('ocupacao', val, { shouldValidate: true })}
@@ -386,9 +436,12 @@ function StepFinanceiro({
           onChange={(e) => setValue('pessoa_politicamente_exposta', e.target.checked)}
           className="mt-1 h-4 w-4 rounded border-qe-gray-300 accent-qe-yellow"
         />
-        <span className="text-[13px] text-qe-gray-600 leading-snug">
-          Sou Pessoa Politicamente Exposta (PEP)
-        </span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[13px] text-qe-gray-600 leading-snug">
+            Sou Pessoa Politicamente Exposta (PEP)
+          </span>
+          <PepTooltip />
+        </div>
       </label>
 
       {/* Separador visual */}
@@ -417,26 +470,28 @@ function StepFinanceiro({
         </p>
       </div>
 
-      <div className="flex gap-3">
-        <Button
-          type="button"
-          variant="secondary"
-          size="lg"
-          leadingIcon={<ArrowLeft size={20} />}
-          onClick={onBack}
-          className="flex-1"
-        >
-          Voltar
-        </Button>
-        <Button
-          type="submit"
-          size="lg"
-          loading={loading}
-          trailingIcon={!loading ? <ArrowRight size={20} /> : undefined}
-          className="flex-[2]"
-        >
-          Enviar
-        </Button>
+      <div className="sticky bottom-0 bg-qe-white pt-3">
+        <div className="flex gap-3">
+          <Button
+            type="button"
+            variant="secondary"
+            size="lg"
+            leadingIcon={<ArrowLeft size={20} />}
+            onClick={onBack}
+            className="flex-1"
+          >
+            Voltar
+          </Button>
+          <Button
+            type="submit"
+            size="lg"
+            loading={loading}
+            trailingIcon={!loading ? <ArrowRight size={20} /> : undefined}
+            className="flex-[2]"
+          >
+            Enviar
+          </Button>
+        </div>
       </div>
     </form>
   )
@@ -470,15 +525,23 @@ function StepKyc({
       </div>
 
       {urlDocumentscopy ? (
-        <a
-          href={urlDocumentscopy}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center justify-center gap-2 w-full h-[52px] bg-qe-yellow text-qe-black font-semibold text-[16px] rounded-qe-pill hover:bg-qe-yellow-hover transition-colors"
-        >
-          <ExternalLink size={18} />
-          Enviar documentos
-        </a>
+        <>
+          <div className="flex justify-center">
+            <div className="bg-white p-3 rounded-qe-md border border-qe-gray-200 inline-block">
+              <QRCodeSVG value={urlDocumentscopy} size={148} />
+            </div>
+          </div>
+
+          <a
+            href={urlDocumentscopy}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center gap-2 w-full h-[52px] bg-qe-yellow text-qe-black font-semibold text-[16px] rounded-qe-pill hover:bg-qe-yellow-hover transition-colors"
+          >
+            <ExternalLink size={18} />
+            Enviar documentos
+          </a>
+        </>
       ) : (
         <p className="text-[12px] text-qe-gray-500 bg-qe-yellow-subtle/50 border border-qe-yellow/20 rounded-qe-md p-3">
           Estamos processando seu cadastro. O link para envio dos documentos será gerado em instantes.<br/><br/>
@@ -544,12 +607,37 @@ function OnboardingMiniBadge({ onExpand }: { onExpand: () => void }) {
   )
 }
 
-// ─── Mini badge flutuante para KYC (em_analise) ──────────────────────────────
+// ─── KYC Pending Badge ───────────────────────────────────────────────────────
 
-function KycMiniBadge({ urlDocumentscopy }: { urlDocumentscopy: string | null }) {
-  const [dismissed, setDismissed] = useState(false)
+const IS_SANDBOX = import.meta.env.VITE_VALIDAPAY_ENV === 'sandbox'
 
-  if (dismissed || !urlDocumentscopy) return null
+function KycPendingBadge({ url }: { url: string }) {
+  const { refreshFreelancer } = useAuth()
+  const { showToast } = useToast()
+  const [expanded, setExpanded] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [simulating, setSimulating] = useState(false)
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(url)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleSimulateApproval = async () => {
+    setSimulating(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('simulate-approval')
+      if (error) throw error
+      if (!data?.ok) throw new Error(data?.error ?? 'Erro ao simular aprovação')
+      showToast('Conta aprovada com sucesso! ✅', 'success')
+      await refreshFreelancer()
+    } catch (err: any) {
+      showToast(`Erro: ${err?.message ?? 'Tente novamente'}`, 'error')
+    } finally {
+      setSimulating(false)
+    }
+  }
 
   return (
     <AnimatePresence>
@@ -558,36 +646,90 @@ function KycMiniBadge({ urlDocumentscopy }: { urlDocumentscopy: string | null })
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 20, scale: 0.95 }}
         transition={{ type: 'spring', stiffness: 400, damping: 28 }}
-        className="fixed bottom-20 right-4 z-[9997] lg:bottom-6"
+        className="fixed bottom-20 right-4 z-[9997] lg:bottom-6 w-[280px]"
       >
-        <div className="bg-qe-white rounded-qe-lg shadow-qe-lg border border-qe-gray-200 w-[260px] overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 bg-qe-yellow">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 size={16} className="text-qe-black" />
-              <span className="text-[13px] font-bold text-qe-black">Validação Pendente</span>
+        <div className="bg-qe-white rounded-qe-lg shadow-qe-lg border border-qe-gray-200 overflow-hidden">
+          {/* Header — só colapsa, não fecha */}
+          <button
+            onClick={() => setExpanded((v) => !v)}
+            className="flex items-center gap-2 w-full px-4 py-3 bg-amber-50 border-b border-amber-200 text-left"
+          >
+            <FileText size={15} className="text-amber-600 shrink-0" />
+            <span className="text-[13px] font-bold text-amber-800 flex-1">Envie seus documentos</span>
+            {expanded
+              ? <ChevronDown size={14} className="text-amber-600" />
+              : <ChevronUp size={14} className="text-amber-600" />
+            }
+          </button>
+
+          {/* Body colapsável */}
+          <AnimatePresence>
+            {expanded && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden"
+              >
+                <div className="px-4 py-4 space-y-4">
+                  <p className="text-[12px] text-qe-gray-500 leading-snug">
+                    Escaneie o QR Code ou copie o link para enviar seus documentos e validar sua conta.
+                  </p>
+
+                  {/* QR Code */}
+                  <div className="flex justify-center">
+                    <div className="bg-white p-2 rounded-qe-md border border-qe-gray-200 inline-block">
+                      <QRCodeSVG value={url} size={140} />
+                    </div>
+                  </div>
+
+                  {/* Botões */}
+                  <div className="flex gap-2">
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 flex items-center justify-center gap-1.5 h-9 bg-qe-yellow text-qe-black text-[13px] font-semibold rounded-qe-pill hover:bg-qe-yellow-hover transition-colors"
+                    >
+                      <ExternalLink size={13} />
+                      Abrir link
+                    </a>
+                    <button
+                      onClick={handleCopy}
+                      className="flex items-center justify-center gap-1.5 h-9 px-3 border border-qe-gray-200 text-qe-gray-600 text-[13px] rounded-qe-pill hover:bg-qe-gray-50 transition-colors"
+                    >
+                      {copied ? <Check size={13} className="text-green-500" /> : <Copy size={13} />}
+                      {copied ? 'Copiado' : 'Copiar'}
+                    </button>
+                  </div>
+
+                  <p className="text-[11px] text-qe-gray-400 text-center leading-snug">
+                    Aprovação em até 24h após o envio dos documentos.
+                  </p>
+
+                  {IS_SANDBOX && (
+                    <button
+                      onClick={handleSimulateApproval}
+                      disabled={simulating}
+                      className="w-full h-9 text-[12px] font-semibold border-2 border-dashed border-amber-300 text-amber-700 rounded-qe-pill hover:bg-amber-50 transition-colors disabled:opacity-50"
+                    >
+                      {simulating ? 'Simulando...' : '🧪 Simular aprovação (sandbox)'}
+                    </button>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Preview collapsed */}
+          {!expanded && (
+            <div className="px-4 py-3">
+              <p className="text-[12px] text-qe-gray-500 leading-snug">
+                Falta só enviar os documentos para ativar sua conta.
+              </p>
             </div>
-            <button
-              onClick={() => setDismissed(true)}
-              className="text-qe-black/50 hover:text-qe-black transition-colors"
-              aria-label="Fechar"
-            >
-              <X size={15} />
-            </button>
-          </div>
-          <div className="px-4 py-3 space-y-3">
-            <p className="text-[12px] text-qe-gray-500 leading-snug">
-              Envie seus documentos para aprovar sua conta e receber por vagas.
-            </p>
-            <a
-              href={urlDocumentscopy}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-between w-full text-[13px] font-semibold text-qe-black hover:text-qe-yellow-text transition-colors"
-            >
-              <span>Enviar documentos</span>
-              <ExternalLink size={16} />
-            </a>
-          </div>
+          )}
         </div>
       </motion.div>
     </AnimatePresence>
@@ -598,7 +740,13 @@ function KycMiniBadge({ urlDocumentscopy }: { urlDocumentscopy: string | null })
 
 export default function OnboardingModal() {
   const { freelancer, refreshFreelancer } = useAuth()
-  const [open, setOpen] = useState(freelancer?.validapay_onboarding_status === null)
+  const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    if (freelancer?.validapay_onboarding_status === null) {
+      setOpen(true)
+    }
+  }, [freelancer?.validapay_onboarding_status])
   const [step, setStep] = useState(1)
   const [addressData, setAddressData] = useState<AddressData | null>(null)
   const [urlDocumentscopy, setUrlDocumentscopy] = useState<string | null>(null)
@@ -611,10 +759,11 @@ export default function OnboardingModal() {
   }
 
   if (freelancer.validapay_onboarding_status === 'em_analise') {
-    return <KycMiniBadge urlDocumentscopy={freelancer.validapay_url_documentscopy ?? null} />
+    return freelancer.validapay_url_documentscopy
+      ? <KycPendingBadge url={freelancer.validapay_url_documentscopy} />
+      : null
   }
 
-  const handleClose = () => setOpen(false)
   const handleExpand = () => setOpen(true)
 
   const handleAddressNext = (data: AddressData) => {
@@ -639,7 +788,6 @@ export default function OnboardingModal() {
       if (!result?.ok) throw new Error(result?.error ?? 'Erro ao criar subconta')
 
       setUrlDocumentscopy(result.urlDocumentscopy ?? null)
-      await refreshFreelancer()
       setStep(3)
     } catch (err: any) {
       showToast(`Não foi possível criar sua conta: ${err?.message ?? 'Erro desconhecido'}`, 'error')
@@ -648,9 +796,14 @@ export default function OnboardingModal() {
     }
   }
 
+  const handleStep3Close = async () => {
+    setOpen(false)
+    await refreshFreelancer()
+  }
+
   return (
     <>
-      <Modal open={open} onClose={handleClose} title="Configurar conta de repasse">
+      <Modal open={open} onClose={handleStep3Close} title="Configurar conta de repasse">
         <StepIndicator current={step} total={3} />
 
         {step === 1 && <StepEndereco onNext={handleAddressNext} />}
@@ -662,7 +815,7 @@ export default function OnboardingModal() {
           />
         )}
         {step === 3 && (
-          <StepKyc urlDocumentscopy={urlDocumentscopy} onClose={handleClose} />
+          <StepKyc urlDocumentscopy={urlDocumentscopy} onClose={handleStep3Close} />
         )}
       </Modal>
 

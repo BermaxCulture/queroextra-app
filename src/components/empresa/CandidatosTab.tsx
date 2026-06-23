@@ -1,4 +1,6 @@
 import * as React from 'react'
+
+const IS_SANDBOX = import.meta.env.VITE_VALIDAPAY_ENV === 'sandbox'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '@/contexts/AuthContext'
@@ -27,6 +29,7 @@ import {
   Clock,
   Copy,
   QrCode,
+  HelpCircle,
 } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { ReviewModal } from '@/components/ReviewModal/ReviewModal'
@@ -121,6 +124,57 @@ function formatMonthYear(iso: string | null) {
 }
 
 // ---------------------------------------------------------------------------
+// Formata número de telefone para exibição: 91999207681 → (91) 9 9920-7681
+// ---------------------------------------------------------------------------
+
+function formatPhoneDisplay(phone: string): string {
+  const d = phone.replace(/\D/g, '')
+  if (d.length === 11) return `(${d.slice(0,2)}) ${d[2]} ${d.slice(3,7)}-${d.slice(7)}`
+  if (d.length === 10) return `(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}`
+  return phone
+}
+
+// ---------------------------------------------------------------------------
+// Tooltip — por que o contato é liberado só após o PIX
+// ---------------------------------------------------------------------------
+
+function PixContactTooltip() {
+  const [visible, setVisible] = React.useState(false)
+
+  return (
+    <div className="relative inline-flex ml-auto shrink-0">
+      <button
+        type="button"
+        onMouseEnter={() => setVisible(true)}
+        onMouseLeave={() => setVisible(false)}
+        onFocus={() => setVisible(true)}
+        onBlur={() => setVisible(false)}
+        onClick={() => setVisible((v) => !v)}
+        className="text-qe-gray-400 hover:text-qe-gray-600 transition-colors"
+        aria-label="Por que o contato é liberado após o pagamento?"
+      >
+        <HelpCircle size={14} />
+      </button>
+
+      {visible && (
+        <div className="absolute bottom-full right-0 mb-2 z-50 w-[230px]">
+          <div className="bg-qe-gray-900 text-white text-[12px] leading-relaxed rounded-qe-md px-3 py-2.5 shadow-qe-lg">
+            <p className="font-semibold mb-1">Por que após o pagamento?</p>
+            <p>
+              O contato só é liberado depois que o pagamento é confirmado para proteger ambos os lados:
+              o profissional garante que será pago, e a empresa garante o comprometimento do profissional com o turno.
+            </p>
+          </div>
+          <div className="flex justify-end pr-1.5">
+            <div className="w-2 h-2 bg-qe-gray-900 rotate-45 -mt-1" />
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Componente
 // ---------------------------------------------------------------------------
 
@@ -209,7 +263,9 @@ export function CandidatosTab({
   // PIX State
   const [pixData, setPixData] = React.useState<{ chargeId: string; emv: string } | null>(null)
   const [pixStatus, setPixStatus] = React.useState<'PENDING' | 'PAID' | 'EXPIRED'>('PENDING')
-  const [pollingTimeout, setPollingTimeout] = React.useState<NodeJS.Timeout | null>(null)
+  const [pollingTimeout, setPollingTimeout] = React.useState<ReturnType<typeof setTimeout> | null>(null)
+  const [simulatingPayment, setSimulatingPayment] = React.useState(false)
+  const [revealedPhone, setRevealedPhone] = React.useState<string | null>(null)
 
   // Limpa polling ao desmontar ou fechar
   React.useEffect(() => {
@@ -425,32 +481,14 @@ export function CandidatosTab({
   const startPixPolling = (chargeId: string, appId: string) => {
     const poll = async () => {
       try {
-        const { data, error } = await supabase.functions.invoke('get-charge-status', {
+        const { data } = await supabase.functions.invoke('get-charge-status', {
           body: { chargeId }
         })
         
         if (data?.status === 'PAID') {
-          setPixStatus('PAID')
           showToast('Pagamento confirmado! Candidato aprovado.', 'success')
-          
-          // O webhook charge.paid atualizará a transação no backend.
-          // Aqui no frontend, nós assumimos que a vaga já foi confirmada,
-          // Então atualizamos a application pra 'aprovado' otimisticamente
-          await supabase.from('applications').update({ status: 'aprovado' }).eq('id', appId)
-          await notify(appId, 'aprovado')
-
-          setTimeout(() => {
-            setIsApproveOpen(false)
-            setSearchParams(
-              (prev) => {
-                prev.set(tabParamName, 'aprovado')
-                prev.set('highlight', appId)
-                return prev
-              },
-              { replace: true }
-            )
-            fetchApplications()
-          }, 1500)
+          const profileId = approveTarget?.profileId ?? ''
+          await handlePaymentConfirmed(appId, profileId)
           return
         }
 
@@ -475,6 +513,42 @@ export function CandidatosTab({
     if (pixData?.emv) {
       navigator.clipboard.writeText(pixData.emv)
       showToast('Código PIX copiado!', 'success')
+    }
+  }
+
+  const handlePaymentConfirmed = async (appId: string, profileId: string) => {
+    setPixStatus('PAID')
+    await notify(appId, 'aprovado')
+
+    // Busca o celular do freelancer via RPC segura (mesmo mecanismo da aba aprovados)
+    try {
+      const { data: celularData } = await supabase.rpc('get_celulares_if_approved', {
+        p_profile_ids: [profileId],
+        p_company_id: company?.id,
+      })
+      const row = (celularData as { profile_id: string; celular: string | null }[] | null)?.[0]
+      setRevealedPhone(row?.celular ?? null)
+    } catch {
+      setRevealedPhone(null)
+    }
+  }
+
+  const handleSimulatePayment = async () => {
+    if (!pixData?.chargeId || !approveTarget) return
+    setSimulatingPayment(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('simulate-payment', {
+        body: { application_id: approveTarget.appId },
+      })
+      if (error) throw error
+      if (!data?.ok) throw new Error(data?.error ?? 'Erro ao simular pagamento')
+
+      await handlePaymentConfirmed(approveTarget.appId, approveTarget.profileId)
+      showToast('Pagamento simulado com sucesso! ✅', 'success')
+    } catch (err: any) {
+      showToast(`Erro: ${err?.message ?? 'Tente novamente'}`, 'error')
+    } finally {
+      setSimulatingPayment(false)
     }
   }
 
@@ -776,69 +850,120 @@ export function CandidatosTab({
       <ResponsiveSheet
         open={isApproveOpen}
         onClose={() => !isActionLoading && setIsApproveOpen(false)}
-        title="Confirmar Contratação"
+        title={pixStatus === 'PAID' ? 'Contratação Confirmada' : 'Confirmar Contratação'}
       >
-        <div className="p-6 space-y-5">
-          <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-qe-md p-4">
-            <AlertCircle className="text-amber-600 shrink-0 mt-0.5" size={20} />
-            <p className="text-[13px] text-amber-800 leading-relaxed">
-              <strong>Integração de pagamento em breve.</strong> Combine o pagamento da diária
-              diretamente com o profissional após o turno.
-            </p>
-          </div>
-          <p className="text-[14px] text-qe-gray-700">
-            Deseja confirmar a contratação de{' '}
-            <strong className="text-qe-gray-900">{approveTarget?.nome}</strong>?
-          </p>
-          <div className="flex items-center gap-2 p-3 bg-qe-gray-50 border border-qe-gray-100 rounded-qe-sm text-[13px] text-qe-gray-500">
-            <Phone size={13} className="text-qe-yellow-text shrink-0" />
-            O número de contato será liberado após a confirmação.
-          </div>
+        <div className="p-6">
+          {pixStatus === 'PAID' ? (
+            /* ── Tela de sucesso — substitui todo o conteúdo ── */
+            <div className="flex flex-col items-center gap-5 text-center py-2 animate-in fade-in zoom-in duration-300">
+              <div className="w-16 h-16 rounded-full bg-green-50 flex items-center justify-center">
+                <Check size={32} className="text-green-500" />
+              </div>
+              <div>
+                <h3 className="font-bold text-[20px] text-qe-gray-900">Pagamento Confirmado!</h3>
+                <p className="text-[14px] text-qe-gray-500 mt-1">
+                  {approveTarget?.nome} foi aprovado(a).
+                </p>
+              </div>
 
-          {!pixData ? (
-            <div className="flex items-center gap-3 justify-end pt-3 border-t border-qe-gray-100">
-              <Button variant="ghost" size="sm" onClick={() => setIsApproveOpen(false)} disabled={isActionLoading}>
-                Cancelar
-              </Button>
-              <Button variant="primary" size="sm" onClick={handleApprove} loading={isActionLoading}>
-                Gerar Cobrança PIX
-              </Button>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center gap-4 py-4 animate-in fade-in zoom-in duration-300">
-              {pixStatus === 'PAID' ? (
-                <div className="flex flex-col items-center gap-2 text-qe-success text-center">
-                  <div className="w-16 h-16 rounded-full bg-qe-success-bg flex items-center justify-center">
-                    <Check size={32} />
+              {revealedPhone ? (
+                <div className="w-full space-y-3">
+                  <div className="bg-qe-gray-50 border border-qe-gray-200 rounded-qe-md p-4 text-left">
+                    <p className="text-[11px] text-qe-gray-400 uppercase tracking-wide mb-1">Contato liberado</p>
+                    <p className="text-[22px] font-bold text-qe-gray-900 tracking-wide">
+                      {formatPhoneDisplay(revealedPhone)}
+                    </p>
                   </div>
-                  <h3 className="font-bold text-[18px]">Pagamento Aprovado!</h3>
-                  <p className="text-[13px]">Aguarde, redirecionando...</p>
+                  <a
+                    href={`https://wa.me/55${revealedPhone.replace(/\D/g, '')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 w-full h-[48px] bg-[#25D366] text-white font-semibold text-[15px] rounded-qe-pill hover:bg-[#1ebe5d] transition-colors"
+                  >
+                    Chamar no WhatsApp
+                  </a>
                 </div>
               ) : (
-                <>
+                <div className="w-full bg-qe-gray-50 border border-qe-gray-100 rounded-qe-md p-4">
+                  <p className="text-[13px] text-qe-gray-400">Número não disponível</p>
+                </div>
+              )}
+
+              <button
+                onClick={() => {
+                  setIsApproveOpen(false)
+                  setSearchParams(
+                    (prev) => {
+                      prev.set(tabParamName, 'aprovado')
+                      prev.set('highlight', approveTarget?.appId ?? '')
+                      return prev
+                    },
+                    { replace: true }
+                  )
+                  fetchApplications()
+                }}
+                className="text-[13px] text-qe-gray-400 hover:text-qe-gray-600 transition-colors"
+              >
+                Ver candidatos aprovados →
+              </button>
+            </div>
+          ) : (
+            /* ── Fluxo normal ── */
+            <div className="space-y-5">
+              {IS_SANDBOX && (
+                <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-qe-md p-4">
+                  <AlertCircle className="text-amber-600 shrink-0 mt-0.5" size={18} />
+                  <p className="text-[13px] text-amber-800 leading-relaxed">
+                    <strong>Ambiente sandbox.</strong> O QR Code PIX gerado é fake — use o botão "Simular pagamento" para testar o fluxo completo.
+                  </p>
+                </div>
+              )}
+              <p className="text-[14px] text-qe-gray-700">
+                Deseja confirmar a contratação de{' '}
+                <strong className="text-qe-gray-900">{approveTarget?.nome}</strong>?
+              </p>
+              <div className="flex items-center gap-2 p-3 bg-qe-gray-50 border border-qe-gray-100 rounded-qe-sm text-[13px] text-qe-gray-500">
+                <Phone size={13} className="text-qe-yellow-text shrink-0" />
+                <span>O número de contato será liberado após o pagamento do PIX</span>
+                <PixContactTooltip />
+              </div>
+
+              {!pixData ? (
+                <div className="flex items-center gap-3 justify-end pt-3 border-t border-qe-gray-100">
+                  <Button variant="ghost" size="sm" onClick={() => setIsApproveOpen(false)} disabled={isActionLoading}>
+                    Cancelar
+                  </Button>
+                  <Button variant="primary" size="sm" onClick={handleApprove} loading={isActionLoading}>
+                    Gerar Cobrança PIX
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-4 py-2 animate-in fade-in zoom-in duration-300">
                   <div className="flex items-center gap-2 text-qe-gray-700">
                     <QrCode size={18} className="text-qe-yellow" />
                     <span className="font-bold">Escaneie para pagar</span>
                   </div>
-                  
                   <div className="p-3 bg-white rounded-xl shadow-sm border border-qe-gray-200">
                     <QRCodeSVG value={pixData.emv} size={200} />
                   </div>
-                  
                   <p className="text-[13px] text-qe-gray-500 text-center max-w-[280px]">
                     Após o pagamento, esta tela atualizará automaticamente em instantes.
                   </p>
-
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full mt-2"
-                    leadingIcon={<Copy size={16} />}
-                    onClick={copyPix}
-                  >
+                  <Button variant="secondary" size="sm" className="w-full" leadingIcon={<Copy size={16} />} onClick={copyPix}>
                     Copiar código Pix (Copia e Cola)
                   </Button>
-                </>
+                  {IS_SANDBOX && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full border-2 border-dashed border-amber-300 text-amber-700 hover:bg-amber-50"
+                      onClick={handleSimulatePayment}
+                      loading={simulatingPayment}
+                    >
+                      🧪 Simular pagamento (sandbox)
+                    </Button>
+                  )}
+                </div>
               )}
             </div>
           )}
