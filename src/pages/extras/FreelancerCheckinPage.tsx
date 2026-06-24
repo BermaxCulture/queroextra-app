@@ -238,6 +238,9 @@ export default function FreelancerCheckinPage() {
         return
       }
 
+      // Limpa o input automaticamente após validação bem-sucedida
+      resetOtp()
+
         // After successful confirmation, update application status
         const newStatus = activePhase === 'checkin' ? 'em_andamento' : 'concluido';
         const { error: statusError } = await supabase
@@ -351,7 +354,7 @@ export default function FreelancerCheckinPage() {
             <div>
               <p className="text-[20px] font-bold text-qe-gray-900">Turno concluído!</p>
               <p className="text-[14px] text-qe-gray-500 mt-1 leading-relaxed max-w-xs">
-                Check-in e check-out confirmados. O valor do turno foi creditado na sua carteira.
+                Check-in e check-out confirmados. O valor já está disponível para saque na sua carteira.
               </p>
             </div>
             <Button variant="secondary" size="md" onClick={() => navigate('/extras/extras')}>
