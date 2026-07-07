@@ -121,6 +121,10 @@ export default function VagaDetalhesPage() {
       showToast('Faça login como freelancer para se candidatar.', 'error')
       return
     }
+    if (freelancer.validapay_onboarding_status !== 'aprovado') {
+      showToast('Configure sua conta de repasse antes de se candidatar.', 'error')
+      return
+    }
 
     try {
       setApplying(true)
@@ -231,6 +235,21 @@ export default function VagaDetalhesPage() {
   )
 
   const renderApplyButton = (className: string) => {
+    // Bloqueia candidatura se onboarding não aprovado (UX — RLS faz o bloqueio real no banco)
+    if (!freelancer?.validapay_onboarding_status || freelancer.validapay_onboarding_status !== 'aprovado') {
+      const isPending = freelancer?.validapay_onboarding_status === 'em_analise'
+      return (
+        <Button
+          variant="secondary"
+          disabled
+          size="lg"
+          className={`border-qe-yellow/40 text-qe-gray-400 pointer-events-none font-bold ${className}`}
+        >
+          {isPending ? 'Aguardando aprovação da conta ⏳' : 'Configure sua conta para se candidatar'}
+        </Button>
+      )
+    }
+
     if (existingApp && existingApp.status === 'rejeitado') {
       return (
         <Button
