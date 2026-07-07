@@ -119,7 +119,7 @@ export function CarteirePage() {
 
   // Saque — valor escolhido
   const [withdrawAmount, setWithdrawAmount] = useState('')
-  const withdrawAmountNum = parseFloat(withdrawAmount.replace(',', '.')) || 0
+  const withdrawAmountNum = parseFloat(withdrawAmount) || 0
   const withdrawAmountValid = withdrawAmountNum > 0 && withdrawAmountNum <= saldoDisponivel
 
   useEffect(() => {
@@ -223,17 +223,11 @@ export function CarteirePage() {
   }
 
   const handleSimulateWithdrawal = async () => {
-    if (!withdrawAmountValid) return
     try {
       setIsWithdrawing(true)
-      // Sandbox: marca as transações liberadas como sacado diretamente no banco
-      const ids = transactions.filter(t => t.status === 'liberado').map(t => t.id)
-      if (ids.length === 0) throw new Error('Nenhuma transação liberada para simular')
-      const { error } = await supabase
-        .from('transactions')
-        .update({ status: 'sacado' })
-        .in('id', ids)
-      if (error) throw error
+      const { data, error } = await supabase.functions.invoke('simulate-withdrawal')
+      if (error) throw new Error(error.message || 'Erro ao simular saque')
+      if (data?.error) throw new Error(data.error)
       showToast('Saque simulado com sucesso! 🧪', 'success')
       setIsWithdrawOpen(false)
       loadedRef.current = false
@@ -272,7 +266,7 @@ export function CarteirePage() {
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
 
   const formatCurrencyRaw = (value: number) =>
-    value.toFixed(2).replace('.', ',')
+    value.toFixed(2)
 
   const getStatusDisplay = (status: Transaction['status']) => {
     switch (status) {

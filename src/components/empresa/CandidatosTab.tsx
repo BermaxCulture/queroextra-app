@@ -455,7 +455,17 @@ export function CandidatosTab({
     if (!approveTarget) return
     try {
       setIsActionLoading(true)
-      
+
+      // Sandbox: pula o PIX e simula o pagamento direto via edge function
+      if (IS_SANDBOX) {
+        const { data, error } = await supabase.functions.invoke('simulate-payment', {
+          body: { application_id: approveTarget.appId },
+        })
+        if (error || !data?.ok) throw new Error(data?.error || 'Erro ao simular pagamento')
+        await handlePaymentConfirmed(approveTarget.appId, approveTarget.profileId)
+        return
+      }
+
       // 1. Gera a cobrança com split
       const { data: chargeData, error: chargeErr } = await supabase.functions.invoke(
         'create-pix-charge',

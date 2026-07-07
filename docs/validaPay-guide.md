@@ -1,7 +1,7 @@
 # ValidaPay API — Documentação de Rotas e Integrações
 
 > Documento gerado automaticamente a partir da coleção Postman oficial da ValidaPay.
-> Destinado a desenvolvedores, integradores e ferramentas de IA que precisam consultar as rotas da API.
+> Destinado ao consumo por IAs, desenvolvedores e integradores.
 
 ---
 
@@ -11,40 +11,40 @@ A **ValidaPay** é uma plataforma de pagamentos brasileira que oferece:
 
 - **PIX** — cobranças instantâneas com QR Code estático e dinâmico
 - **Boleto bancário** — emissão de boletos com vencimento, juros e desconto
-- **Cartão de crédito** — armazenamento seguro dos dados do cartão e cobrança sem redirecionar o cliente para outra página
-- **Assinaturas** — cobrança recorrente com suporte a mudança de plano e ajuste proporcional de valor
-- **Checkouts** — páginas de pagamento prontas hospedadas pela ValidaPay
+- **Cartão de crédito** — tokenização e cobrança via checkout transparente
+- **Assinaturas** — recorrência com suporte a upgrade/downgrade e pro-rata
+- **Checkouts** — sessões de pagamento hospedadas pela ValidaPay
 - **Split de pagamentos** — divisão automática de receita entre subcontas
-- **Subcontas** — cadastro e gestão de contas filhas dentro de um marketplace
+- **Subcontas** — onboarding e gestão de sub-merchants (marketplace)
 - **Cupons** — descontos aplicáveis a cobranças e assinaturas
-- **Carteira** — saldo, extrato, recebimentos agendados
-- **Saques** — transferência via PIX, listagem e validação de chave
-- **Reembolsos** — estorno total ou parcial de cobranças
-- **Clientes** — cadastro e gestão de dados dos compradores
-- **Webhooks** — notificações em tempo real com gerenciamento de eventos
+- **Saques e extratos** — movimentação financeira da carteira digital
+- **Devoluções** — estorno total ou parcial de cobranças PIX
 
 ---
 
 ## Autenticação
 
-A autenticação usa o fluxo de credenciais de cliente (chamadas de servidor para servidor, sem usuário logado). Todas as rotas protegidas exigem o header:
+Todas as rotas protegidas exigem o header:
 
 ```
 Authorization: Bearer {{token}}
 ```
 
-### Gerar Token
+### Obter Token OAuth2
 
 ```
-POST https://oauth2.validapay.com.br/auth/token
+POST {{auth_url}}/auth/token
 Content-Type: application/x-www-form-urlencoded
 ```
 
 **Body (form-urlencoded):**
 
-```
-grant_type=client_credentials&client_id={{client_id}}&client_secret={{client_secret}}&scope={{scope}}
-```
+| Campo | Tipo | Descrição |
+|-------|------|-----------|
+| `grant_type` | string | Sempre `client_credentials` |
+| `client_id` | string | ID do cliente OAuth2 (`{{client_id}}`) |
+| `client_secret` | string | Segredo do cliente (`{{client_secret}}`) |
+| `scope` | string | Escopos solicitados (ver lista abaixo) |
 
 **Escopos disponíveis:**
 
@@ -56,76 +56,25 @@ proposals/read        proposals/write
 subscriptions/read    subscriptions/write
 checkouts/read        checkouts/write
 customers/read        customers/write
-subaccounts/read      coupons/read
-coupons/write         payment.methods/write
+subaccounts/read
 ```
 
-> ⚠️ **Solicite apenas os escopos que suas credenciais têm permissão.** Incluir qualquer escopo não autorizado retorna `403` imediatamente — mesmo que os demais sejam válidos. Se receber `403` ao gerar o token, revise os escopos solicitados.
-
-**Escopos mínimos por fluxo:**
-
-| Fluxo | Escopo necessário |
-|-------|------------------|
-| Criar/capturar cobrança PIX | `pix.cob/write` |
-| Criar/capturar cobrança de cartão | `checkouts/write` |
-| Tokenizar cartão (`paymentMethodId`) | `payment.methods/write` |
-| Listar cobranças | `pix.cob/read` |
-| Criar checkout | `checkouts/write` |
-| Criar produto | `products/write` |
-
-> 💡 Tokenização de cartão usa um **token M2M separado** com escopo `payment.methods/write`. Não misture esse escopo no mesmo token usado para criar cobranças se suas credenciais não tiverem permissão para ambos.
-
-**Respostas:**
-
-<details>
-<summary><code>200</code> — Token gerado</summary>
-
-```json
-{
-  "access_token": "eyJ...",
-  "expires_in": 3600,
-  "token_type": "Bearer"
-}
-```
-
-</details>
-
-<details>
-<summary><code>401</code> — Credenciais inválidas</summary>
-
-```json
-{
-  "error": "invalid_client",
-  "error_description": "Client authentication failed"
-}
-```
-
-</details>
-
-> **Variáveis de ambiente esperadas:** `{{base_url}}`, `{{client_id}}`, `{{client_secret}}`, `{{scope}}`, `{{token}}`
+> **Variáveis de ambiente esperadas:** `{{base_url}}`, `{{auth_url}}`, `{{client_id}}`, `{{client_secret}}`, `{{scope}}`, `{{token}}`
 
 ---
 
 ## Formato de Erros
 
-A maioria dos erros segue o padrão:
+Todos os erros seguem o padrão:
 
 ```json
 {
-  "message": "Descrição legível do erro",
-  "code": "ERROR_CODE_ENUM",
-  "details": null
-}
-```
-
-**Exceção — cartão recusado (HTTP `402`):** neste caso o corpo usa um formato diferente, sem campo `code`:
-
-```json
-{
-  "success": false,
-  "chargeId": "cha_xxx",
-  "status": "failed",
-  "error": "declined"
+  "error": {
+    "message": "Descrição legível do erro",
+    "code": "ERROR_CODE_ENUM",
+    "details": null,
+    "timestamp": "2026-06-10T10:00:00.000Z"
+  }
 }
 ```
 
@@ -133,66 +82,220 @@ A maioria dos erros segue o padrão:
 |-------------|-------------|
 | `400` | Dados inválidos na requisição |
 | `401` | Token ausente, expirado ou inválido |
-| `402` | Cartão recusado pelo emissor |
 | `403` | Sem permissão / escopo insuficiente |
 | `404` | Recurso não encontrado |
 | `409` | Conflito de estado (ex.: cobrança já paga) |
 | `500` | Erro interno do servidor |
 
-**Códigos de erro frequentes em cobranças:**
-
-| Código | Situação |
-|--------|----------|
-| `CHARGE_NOT_PAYABLE` | Tentativa de capturar uma cobrança que não está em estado `PENDING` |
-| `CHARGE_NOT_FOUND` | `chargeId` não existe |
-| `CARD_TOKENIZATION_FAILED` | Falha ao processar os dados do cartão |
-| `CUSTOMER_REQUIRED` | Cartão enviado para pagamento sem `customer` — informe ao menos `customer.documentNumber` |
-| `CARD_NOT_TOKENIZED` | O cartão informado não está tokenizado no provider de cartão ativo da conta |
-| `PAYMENT_METHOD_NOT_FOUND` | `paymentMethodId` não existe |
-| `ACCOUNT_NOT_FOUND` | Conta não encontrada. **Pode ser transitório** — se ocorrer logo após uma tokenização ou em chamadas em sequência rápida, aguarde 30–60 segundos e tente novamente antes de investigar configuração de credenciais |
-
 ---
 
-## Contas e Subcontas
+## PIX
 
-Gerencia contas filhas dentro de um marketplace ValidaPay. O fluxo é: (1) criar proposta de cadastro, (2) acompanhar o andamento pelo `formId`, (3) listar subcontas aprovadas. Documentos com 11 dígitos (CPF) criam conta de pessoa física; com 14 dígitos (CNPJ) criam conta de pessoa jurídica.
+Cobranças via PIX usando QR Code dinâmico. O `emv` retornado é o payload do QR Code que o cliente usa para pagar. O `expiration` define em segundos por quanto tempo o QR Code é válido.
 
-### Criar Proposta PF
+**Ciclo de status:** `PENDING` → `PAID` → (`CANCELED` | `ARCHIVED` | `REFUNDED` | `PARTIALLY_REFUNDED`)
+
+### Status de cobrança
 
 ```
-POST {{base_url}}/v1/proposals
+GET {{base_url}}/v1/charges/:chargeId
 ```
 
-**Escopo necessário:** `proposals/write`
+**Escopo necessário:** `pix.cob/read`
 
-> ⚠️ **Atenção:** Não é possível criar uma subconta com o mesmo e-mail e telefone da conta principal.
-> ⚠️ **Atenção:** Dados de renda/faturamento no campo `financialDetails` são obrigatórios.
+**Parâmetros de rota:**
+
+| Parâmetro | Descrição |
+|-----------|-----------|
+| `:chargeId` | ID do recurso |
+
+**Respostas:**
+
+<details>
+<summary><code>200</code> — 200</summary>
+
+```json
+{
+    "chargeId": "cha_1771453171013_fp6iocaxb",
+    "status": "PAID",
+    "amount": 0.2,
+    "paymentType": "PIX",
+    "emv": "00020101021226910014br.gov.bcb.pix2569qrcode.pix.celcoin.com.br/pixqrcode/v2/bfc2182e025f97f17f843ae1fe8a895204000053039865802BR5909ValidaPix6013Florianopolis62070503***63049C4E",
+    "paidAt": "2026-02-18T22:22:50.031Z",
+    "createdAt": "2026-02-18T22:19:31.013Z",
+}
+```
+
+</details>
+
+<details>
+<summary><code>200</code> — 200 — PENDING</summary>
+
+```json
+{
+  "chargeId": "cha_1771453171013_fp6iocaxb",
+  "status": "PENDING",
+  "amount": 10.0,
+  "paymentType": "PIX",
+  "emv": "00020101021226910014br.gov.bcb.pix2569qrcode.pix.celcoin.com.br/pixqrcode/v2/example5204000053039865802BR5909ValidaPix6013Florianopolis62070503***6304ABCD",
+  "createdAt": "2026-06-10T10:00:00.000Z"
+}
+```
+
+</details>
+
+<details>
+<summary><code>200</code> — 200 — CANCELED</summary>
+
+```json
+{
+  "chargeId": "cha_1771453171013_fp6iocaxb",
+  "status": "CANCELED",
+  "amount": 10.0,
+  "paymentType": "PIX",
+  "canceledAt": "2026-06-10T10:05:00.000Z",
+  "createdAt": "2026-06-10T10:00:00.000Z"
+}
+```
+
+</details>
+
+<details>
+<summary><code>404</code> — 404 — Cobrança não encontrada</summary>
+
+```json
+{
+  "error": {
+    "message": "Cobrança cha_xxx não encontrada",
+    "code": "CHARGE_NOT_FOUND",
+    "details": null,
+    "timestamp": "2026-06-10T10:00:00.000Z"
+  }
+}
+```
+
+</details>
+
+
+### Cancelar cobrança
+
+```
+DELETE {{base_url}}/v1/charges/:chargeId
+```
+
+**Escopo necessário:** `pix.cob/write`
+
+**Parâmetros de rota:**
+
+| Parâmetro | Descrição |
+|-----------|-----------|
+| `:chargeId` | ID do recurso |
+
+**Respostas:**
+
+<details>
+<summary><code>200</code> — 200</summary>
+
+```json
+{
+  "message": "Cobrança cancelada com sucesso",
+  "chargeId": "cha_1779239661689_g1ugeix0e"
+}
+```
+
+</details>
+
+<details>
+<summary><code>400</code> — 400 — Cobrança já paga</summary>
+
+```json
+{
+  "error": {
+    "message": "Não é possível cancelar uma cobrança com status PAID",
+    "code": "CHARGE_ALREADY_PAID",
+    "details": null,
+    "timestamp": "2026-06-10T10:00:00.000Z"
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><code>404</code> — 404 — Não encontrada</summary>
+
+```json
+{
+  "error": {
+    "message": "Cobrança cha_xxx não encontrada",
+    "code": "CHARGE_NOT_FOUND",
+    "details": null,
+    "timestamp": "2026-06-10T10:00:00.000Z"
+  }
+}
+```
+
+</details>
+
+
+### Arquivar cobrança
+
+```
+POST {{base_url}}/v1/charges/:chargeId/archive
+```
+
+**Escopo necessário:** `pix.cob/write`
+
+**Parâmetros de rota:**
+
+| Parâmetro | Descrição |
+|-----------|-----------|
+| `:chargeId` | ID do recurso |
+
+**Respostas:**
+
+<details>
+<summary><code>200</code> — 200</summary>
+
+```json
+{
+  "chargeId": "cha_1779238435235_iaw4pcprl",
+  "status": "ARCHIVED",
+  "archivedAt": "2026-05-23T13:06:09.693Z"
+}
+```
+
+</details>
+
+
+### Cobrança imediata
+
+```
+POST {{base_url}}/v1/charges/pix
+```
+
+**Escopo necessário:** `pix.cob/write`
+
+Com esta funcionalidade você pode criar um QR Code de cobrança imediata.
+
+**Case de uso:**
+
+_Como SaaS, quero gerar cobranças preenchendo apenas o valor do produto e nada mais_
 
 **Body (JSON):**
 
 ```json
 {
-  "documentNumber": "12345678901",
-  "fullName": "João da Silva",
-  "phoneNumber": "+5511999998888",
-  "email": "joao@email.com",
-  "motherName": "Maria da Silva",
-  "birthDate": "1990-01-15",
-  "isPoliticallyExposedPerson": false,
-  "socialName": null,
-  "address": {
-    "postalCode": "01310100",
-    "street": "Av. Paulista",
-    "number": "1000",
-    "neighborhood": "Bela Vista",
-    "city": "São Paulo",
-    "state": "SP",
-    "addressComplement": "Apto 52"
+  "amount": 10.0,
+  "expiration": 3600,
+  "customer": {
+    "name": "Isaac Newton",
+    "documentNumber": "12345678920",
+    "email": "isaac@example.com",
+    "phone": "11975896541"
   },
-  "financialDetails": {
-    "declaredIncome": "1DINP02",
-    "occupation": "ONP07",
-    "netWorth": "NWNP02"
+  "metadata": {
+    "externalId": "pedido-123"
   },
   "webhookUrl": "https://api.seusite.com.br/webhook"
 }
@@ -201,46 +304,218 @@ POST {{base_url}}/v1/proposals
 **Respostas:**
 
 <details>
-<summary><code>200</code> — FINISHED</summary>
+<summary><code>200</code> — 200</summary>
 
 ```json
 {
-  "status": "FINISHED",
-  "formId": "form_xxx",
-  "sendStatus": "SENT",
-  "proposalId": "prop_xxx"
+    "chargeId": cha_1771511282731_9p1wo3tql,
+    "emv": "00020101021226910014br.gov.bcb.pix2569qrcode.pix.celcoin.com.br/pixqrcode/v2/77e66fbad26b0b294eeb56c7c7c29f5204000053039865802BR5909ValidaPix6013Florianopolis62070503***6304BA13"
 }
 ```
 
 </details>
 
 <details>
-<summary><code>200</code> — UNFINISHED</summary>
+<summary><code>400</code> — 400 — Valor inválido</summary>
 
 ```json
 {
-  "status": "UNFINISHED",
-  "formId": "form_xxx",
-  "pendingFields": ["financialDetails.declaredIncome"]
+  "error": {
+    "message": "O campo amount deve ser maior que zero",
+    "code": "INVALID_AMOUNT",
+    "details": null,
+    "timestamp": "2026-06-10T10:00:00.000Z"
+  }
 }
 ```
 
 </details>
 
 <details>
-<summary><code>400</code> — Documento inválido</summary>
+<summary><code>401</code> — 401 — Token inválido</summary>
 
 ```json
 {
-  "code": "INVALID_DOCUMENT",
-  "message": "CPF inválido"
+  "error": {
+    "message": "Token de autenticação inválido ou expirado",
+    "code": "UNAUTHORIZED",
+    "details": null,
+    "timestamp": "2026-06-10T10:00:00.000Z"
+  }
 }
 ```
 
 </details>
 
 
-### Criar Proposta PJ
+---
+
+## Split de Pagamentos
+
+Divide automaticamente o valor de uma cobrança PIX entre múltiplas subcontas. Dois tipos de split: `fixed` (valor fixo em R$) e `percentage` (percentual do valor bruto). O split é descontado do valor líquido após as taxas da ValidaPay.
+
+### Cobrança imediata com split
+
+```
+POST {{base_url}}/v1/charges/pix
+```
+
+**Escopo necessário:** `pix.cob/write`
+
+Com esta funcionalidade você pode criar um QR Code de cobrança na sua conta e fazer split para outras contas ValidaPay.
+
+**Case de uso:**
+
+_Como SaaS, tenho parceiros/afiliados PF ou PJ. Quero gerar cobranças na minha conta preenchendo apenas o valor do produto e fazer split para as contas dos meus parceiros._
+
+**Body (JSON):**
+
+```json
+{
+  "amount": 100.0,
+  "split": [
+    {
+      "type": "fixed",
+      "accountNumber": "896532569",
+      "amount": 10.0
+    },
+    {
+      "type": "percentage",
+      "accountNumber": "125485692",
+      "percentage": 5
+    }
+  ],
+  "metadata": {
+    "externalId": "pedido-456"
+  }
+}
+```
+
+**Respostas:**
+
+<details>
+<summary><code>200</code> — 200</summary>
+
+```json
+{
+    "chargeId": cha_1881511282731_9p1wo5plk,
+    "emv": "00020101021226910014br.gov.bcb.pix2569qrcode.pix.celcoin.com.br/pixqrcode/v2/77e66fbad26b0b294eeb56c7c7c29f5204000053039865802BR5909ValidaPix6013Florianopolis62070503***6304BA13"
+}
+```
+
+</details>
+
+<details>
+<summary><code>400</code> — 400 — Split excede valor líquido</summary>
+
+```json
+{
+  "error": {
+    "message": "O valor total do split não pode exceder o valor líquido da cobrança",
+    "code": "SPLIT_AMOUNT_EXCEEDED",
+    "details": null,
+    "timestamp": "2026-06-10T10:00:00.000Z"
+  }
+}
+```
+
+</details>
+
+
+### Split para Conta Master
+
+```
+POST {{base_url}}/v1/charges/pix
+```
+
+**Escopo necessário:** `pix.cob/write`
+
+Com esta funcionalidade você pode criar um QR Code de cobrança na conta de um _Seller_ e fazer split para a sua conta.
+
+**Case de uso:**
+
+_Como SaaS tenho vários Sellers, cada um deles possui uma subconta ValidaPay. Quero gerar cobranças para qualquer subconta preenchendo apenas o valor do produto e fazer split para a minha conta Master_
+
+> ⚠️ **Atenção:** O número da subconta é retornado via webhook quando a subconta é aprovada.
+
+**Headers opcionais:**
+
+| Header | Valor | Descrição |
+|--------|-------|-----------|
+| `X-Sub-Account` | `{{subaccount_number}}` |   [REQUIRED] Subconta da cobrança |
+
+**Body (JSON):**
+
+```json
+{
+  "amount": 1.0,
+  "split": [
+    {
+      "type": "fixed",
+      "amount": 0.1
+    }
+  ]
+}
+```
+
+**Respostas:**
+
+<details>
+<summary><code>200</code> — 200</summary>
+
+```json
+{
+    "chargeId": cha_15631511282731_9p1wo5ghu,
+    "emv": "00020101021226910014br.gov.bcb.pix2569qrcode.pix.celcoin.com.br/pixqrcode/v2/77e66fbad26b0b294eeb56c7c7c29f5204000053039865802BR5909ValidaPix6013Florianopolis62070503***6304BA13"
+}
+```
+
+</details>
+
+
+### Status de cobrança com split
+
+```
+GET {{base_url}}/v1/charges/:chargeId
+```
+
+**Escopo necessário:** `pix.cob/read`
+
+**Parâmetros de rota:**
+
+| Parâmetro | Descrição |
+|-----------|-----------|
+| `:chargeId` | ID do recurso |
+
+**Respostas:**
+
+<details>
+<summary><code>200</code> — 200</summary>
+
+```json
+{
+    "chargeId": "cha_1771453171013_fp6iocaxb",
+    "status": "PAID",
+    "amount": 0.2,
+    "paymentType": "PIX",
+    "masterAccointId": "2345567893",
+    "subaccountId": "987654322",
+    "emv": "00020101021226910014br.gov.bcb.pix2569qrcode.pix.celcoin.com.br/pixqrcode/v2/bfc2182e025f97f17f843ae1fe8a895204000053039865802BR5909ValidaPix6013Florianopolis62070503***63049C4E",
+    "paidAt": "2026-02-18T22:22:50.031Z",
+    "createdAt": "2026-02-18T22:19:31.013Z",
+}
+```
+
+</details>
+
+
+---
+
+## Subcontas (Marketplace)
+
+Gerencia sub-merchants dentro de um marketplace ValidaPay. O fluxo é: (1) criar proposta de onboarding, (2) acompanhar status via `formId`, (3) listar subcontas aprovadas. Documentos CPF (11 dígitos) criam conta PF; CNPJ (14 dígitos) criam conta PJ.
+
+### Criar subconta PF
 
 ```
 POST {{base_url}}/v1/proposals
@@ -248,84 +523,182 @@ POST {{base_url}}/v1/proposals
 
 **Escopo necessário:** `proposals/write`
 
+Com esta funcionalidade você pode criar subcontas Pessoa Física na ValidaPay. Ao criar a subconta ela ficará associada à sua conta (chamaremos de conta Master).
+
+Case de uso:
+
+_Como SaaS tenho vários Sellers, preciso gerar cobranças para esses Sellers e receber split em cada venda._
+
+> ⚠️ **Atenção:** Não é possivel criar uma subconta com mesmo email e telefone da _master account._ 
+  
+> ⚠️ **Atenção:** Dados de renda/faturamento no campo financialDetails são obrigatórios. Os respectivos códigos estão descritos no apêndice Campos Financeiros ao final da sessão Subcontas ValidaPay
+
 **Body (JSON):**
 
 ```json
 {
-  "documentNumber": "12345678000195",
-  "businessName": "Empresa LTDA",
-  "tradingName": "Empresa",
-  "businessEmail": "contato@empresa.com",
-  "contactNumber": "+5511999998888",
+  "documentNumber": "77753120093",
+  "phoneNumber": "+5511912345678",
+  "email": "validapay@validapay.com.br",
+  "motherName": "Teste Mãe",
+  "fullName": "Richard Feynman",
+  "socialName": "",
+  "birthDate": "31-12-2000",
+  "address": {
+    "postalCode": "06455030",
+    "street": "Alameda Xingu",
+    "number": "350",
+    "addressComplement": "",
+    "neighborhood": "Alphaville Industrial",
+    "city": "Barueri",
+    "state": "SP"
+  },
+  "isPoliticallyExposedPerson": false,
+  "financialDetails": {
+    "declaredIncome": "1DINP02",
+    "occupation": "ONP07",
+    "netWorth": "NWNP02"
+  },
+  "webhookUrl": "https://api.teste.com.br"
+}
+```
+
+**Respostas:**
+
+<details>
+<summary><code>201</code> — 201</summary>
+
+```json
+{
+  "status": "UNFINISHED",
+  "message": "Formulário criado com sucesso",
+  "formId": "a6358673-dd00-4c6d-9592-df393513a78a"
+}
+```
+
+</details>
+
+<details>
+<summary><code>200</code> — 200</summary>
+
+```json
+{
+  "status": "FINISHED",
+  "message": "Formulário atualizado com sucesso",
+  "formId": "cda0e605-44f7-4cbc-850c-ef3a2073c685"
+}
+```
+
+</details>
+
+
+### Criar subconta PJ
+
+```
+POST {{base_url}}/v1/proposals
+```
+
+**Escopo necessário:** `proposals/write`
+
+Com esta funcionalidade você pode criar subcontas Pessoa Jurídica na ValidaPay. Ao criar a subconta ela ficará associada à sua conta (chamaremos de conta Master).
+
+Case de uso:
+
+_Como SaaS tenho vários Sellers, preciso gerar cobranças para esses Sellers e receber split em cada venda._
+
+> ⚠️ **Atenção:** Não é possivel criar uma subconta com mesmo email e telefone da _master account_ 
+  
+> ⚠️ **Atenção:** Dados de renda/faturamento no campo financialDetails são obrigatórios. Os respectivos códigos estão descritos no apêndice Campos Financeiros ao final da sessão Subcontas ValidaPay
+
+**Body (JSON):**
+
+```json
+{
+  "contactNumber": "+5511912345678",
+  "documentNumber": "87649940000194",
+  "businessEmail": "validapay@validapay.com.br",
+  "businessName": "VaplidaPay",
+  "tradingName": "validaPay LTDA",
   "companyType": "PJ",
-  "businessAddress": {
-    "postalCode": "01310100",
-    "street": "Av. Paulista",
-    "number": "1000",
-    "neighborhood": "Bela Vista",
-    "city": "São Paulo",
-    "state": "SP",
-    "addressComplement": null
-  },
-  "financialCompanyDetails": {
-    "declaredCompanyRevenue": "DCRB02"
-  },
   "owner": [
     {
       "ownerType": "SOCIO",
       "documentNumber": "72352781027",
-      "fullName": "Cesar Lattes",
+      "fullName": "Cesar Lattes ",
       "phoneNumber": "+5511912345128",
-      "email": "socio@empresa.com",
+      "email": "sociokyc@celcoin.com.br",
       "motherName": "Marie Curie",
+      "socialName": "Nome",
       "birthDate": "02-02-1990",
-      "isPoliticallyExposedPerson": false,
       "address": {
         "postalCode": "06455030",
         "street": "Alameda Xingu",
         "number": "50",
+        "addressComplement": "",
         "neighborhood": "Alphaville Industrial",
         "city": "Barueri",
         "state": "SP"
       },
+      "isPoliticallyExposedPerson": false,
       "financialOwnerDetails": {
         "ownerDeclaredIncome": "ODIB02",
         "ownerDeclaredRevenue": "ODRB02"
       }
     }
   ],
-  "webhookUrl": "https://api.seusite.com.br/webhook"
+  "businessAddress": {
+    "postalCode": "06455030",
+    "street": "Alamed Xingu",
+    "number": "350",
+    "addressComplement": "",
+    "neighborhood": "Alphaville Industrial",
+    "city": "Barueri",
+    "state": "SP"
+  },
+  "webhookUrl": "https://api.teste.com.br"
 }
 ```
 
 **Respostas:**
 
 <details>
-<summary><code>200</code> — FINISHED</summary>
+<summary><code>201</code> — 201</summary>
+
+```json
+{
+  "status": "UNFINISHED",
+  "message": "Formulário criado com sucesso",
+  "formId": "fb8cbb9d-d376-4604-940c-957e76e3dcbb"
+}
+```
+
+</details>
+
+<details>
+<summary><code>200</code> — 200</summary>
 
 ```json
 {
   "status": "FINISHED",
-  "formId": "form_xxx",
-  "sendStatus": "SENT",
-  "proposalId": "prop_xxx"
+  "message": "Formulário criado com sucesso",
+  "formId": "8f82a068-ff1a-45b7-8f98-71f07176e0dd"
 }
 ```
 
 </details>
 
 
-### Buscar Proposta
+### Status de subconta
 
 ```
-GET {{base_url}}/v1/proposals/:id
+GET {{base_url}}/v1/proposals/:formId
 ```
 
-**Escopo necessário:** `proposals/read`
+**Escopo necessário:** `proposals/write`
 
-Quando a conta for aprovada, um evento será enviado para a URL de webhook informada no cadastro. O evento tem o seguinte formato:
+Quando a conta for aprovada, será enviado um evento na URL de webhook cadastrada nas rotas de criação de conta PF e PJ. O evento segue o seguinte layout:
 
-```json
+``` json
 {
   "event": "account_approved",
   "status": "CONFIRMED",
@@ -341,55 +714,156 @@ Quando a conta for aprovada, um evento será enviado para a URL de webhook infor
   "formId": "7b83fcb4-fe9c-4ad3-8d3a-621fe9c9ffc1",
   "createdAt": "2025-06-02T17:46:10.1120909"
 }
-```
+
+ ```
 
 **Parâmetros de rota:**
 
 | Parâmetro | Descrição |
 |-----------|-----------|
-| `:id` | `formId` retornado ao criar a proposta |
+| `:formId` | ID do recurso |
 
 **Respostas:**
 
 <details>
-<summary><code>200</code> — Proposta encontrada</summary>
+<summary><code>200</code> — PF 200</summary>
 
 ```json
 {
-  "formId": "form_xxx",
-  "proposalStatus": "FINISHED",
-  "pendingFields": [],
-  "metaData": {}
+  "phoneNumber": "+5511912345678",
+  "isPoliticallyExposedPerson": false,
+  "documentNumber": "82117120083",
+  "motherName": "Teste Mãe",
+  "fullName": "Teste teste",
+  "type": "PF",
+  "birthDate": "31-12-2000",
+  "email": "everton.silva@validapix.tech",
+  "socialName": "",
+  "address": {
+    "number": "12",
+    "addressComplement": "",
+    "city": "Barueri",
+    "street": "Alameda Xingu",
+    "postalCode": "",
+    "neighborhood": "Alphaville Industrial",
+    "state": "SP"
+  },
+  "metaData": {
+    "formId": "a6358673-dd00-4c6d-9592-df393513a78a",
+    "createdAt": "2025-11-21T21:52:49.155Z",
+    "updatedAt": "2025-11-21T21:53:43.213Z"
+  },
+  "proposalStatus": {
+    "form": "UNFINISHED",
+    "proposal": "PENDING",
+    "documents": "PENDING",
+    "urlDocumentscopy": "https://validapay.cadastro.io/0336bdddcd087923e2d0249b4cdd268d"
+  }
 }
 ```
 
 </details>
 
 <details>
-<summary><code>404</code> — Não encontrada</summary>
+<summary><code>200</code> — PJ 200</summary>
 
 ```json
 {
-  "code": "FORM_NOT_FOUND",
-  "message": "Formulário não encontrado"
-}
+  "documentNumber": "11116404000161",
+  "type": "PJ",
+  "businessName": "FULANO SILVA PUBLICIDADE, PROMOCAO E PRODUCAO DE EVENTOS ESPORTIVOS LTDA",
+  "tradingName": "NEY SILVA",
+  "businessEmail": "sdgasgasf@gmail.com",
+  "contactNumber": "+558145630249",
+  "businessAddress": {
+    "number": "10",
+    "addressComplement": "CXPST 2",
+    "city": "CHA GRANDE",
+    "street": "ANTONIO",
+    "postalCode": "55636000",
+    "neighborhood": "CAMELA",
+    "state": "PE"
+  },
+  "financialCompanyDetails": {
+    "declaredCompanyRevenue": "DCRB02"
+  },
+  "owner": [
+    {
+      "ownerType": "SOCIO",
+      "address": {
+        "number": "10",
+        "city": "CHA GRANDE",
+        "street": "Av. Sao Jose",
+        "postalCode": "55636000",
+        "neighborhood": "Chã Grande",
+        "state": "PE",
+        "complement": ""
+      },
+      "financialOwnerDetails": {
+        "ownerDeclaredIncome": "ODIB04"
+      },
+      "phoneNumber": "+558112345689",
+      "isPoliticallyExposedPerson": false,
+      "documentNumber": "68574699039",
+      "motherName": "SELMA MARIA DA SILVA",
+      "fullName": "FUNANO CRISTOVAO DA SILVA",
+      "type": "PF",
+      "birthDate": "30-11-1991",
+      "email": "asfrgasfghafhafs@gmail.com"
+    }
+  ],
+  "proposalId": "d0c39afa-d034-4330-8d57-527eacca88c6",
+  "metaData": {
+    "formId": "31aa2217-a149-40ba-847f-c23500a635c7",
+    "createdAt": "2026-02-24T02:18:55.257Z",
+    "updatedAt": "2026-02-24T02:29:04.911Z",
+    "origin": "API"
+  },
+  "proposalStatus": {
+    "fo
+// ... (truncado)
 ```
 
 </details>
 
 
-### Listar Subcontas
+### Listar subcontas
 
 ```
-GET {{base_url}}/v1/accounts/subaccounts
+GET {{base_url}}/v1/accounts/subaccounts?dateFrom=2026-02-01T00:00:00.000Z&dateTo=2026-02-23T23:59:59.999Z&page=1&perPage=15
 ```
 
 **Escopo necessário:** `subaccounts/read`
 
+Com esta rota você poderá listar todas as subcontas associadas à sua _master account_
+
+**Query params:**
+
+| Parâmetro | Exemplo | Obrigatório | Descrição |
+|-----------|---------|-------------|-----------|
+| `dateFrom` | `2026-02-01T00:00:00.000Z` | sim |  |
+| `dateTo` | `2026-02-23T23:59:59.999Z` | sim |  |
+| `page` | `1` | sim |  |
+| `perPage` | `15` | sim |  |
+
+**Body (JSON):**
+
+```json
+{
+  "amount": 1.0,
+  "split": [
+    {
+      "type": "fixed",
+      "amount": 0.1
+    }
+  ]
+}
+```
+
 **Respostas:**
 
 <details>
-<summary><code>200</code> — Sucesso</summary>
+<summary><code>200</code> — 200</summary>
 
 ```json
 {
@@ -404,55 +878,125 @@ GET {{base_url}}/v1/accounts/subaccounts
       "name": "Friedrich Nietzsche",
       "dailyWithdrawalLimit": 3000,
       "balance": 0
+    },
+    {
+      "documentNumber": "14282497700",
+      "createdAt": "2026-02-17T20:38:45.664Z",
+      "accountNumber": "4949228",
+      "status": "CONFIRMED",
+      "onboardingId": "30608b18-7258-437d-a6cb-63e5882e4fb7",
+      "name": "Tales de Mileto",
+      "dailyWithdrawalLimit": 3000,
+      "balance": 170.9
     }
   ],
   "page": 1,
   "perPage": 15,
-  "hasMore": false
+  "hasMore": false,
+  "dateFrom": "2026-02-01T00:00:00.000Z",
+  "dateTo": "2026-02-23T23:59:59.999Z"
 }
 ```
 
 </details>
 
----
 
-## Carteira
-
-Consulta saldo, extrato de transações e agenda de recebimentos futuros. A navegação entre páginas é feita usando o campo `lastKey` retornado em cada resposta.
-
-### Consultar Saldo
+### Listar cobranças
 
 ```
-GET {{base_url}}/v1/wallet/balance?accountId=
+GET {{base_url}}/v1/charges?dateFrom=2026-02-01T00:00:00.000Z&dateTo=2026-02-23T23:59:59.999Z&page=1&perPage=15
 ```
 
-**Escopo necessário:** `wallet/read`
+**Escopo necessário:** `subaccounts/read`
 
-> ⚠️ Para consultar o saldo de várias subcontas, envie `accountId` com os números separados por vírgula.
+Com esta rota você poderá listar todas as cobranças que a sua _master account_ gerou em uma subcontas
+
+**Headers opcionais:**
+
+| Header | Valor | Descrição |
+|--------|-------|-----------|
+| `X-Sub-Account` | `{{subaccount_number}}` |   [REQUIRED] Subconta da qual você quer listar as cobranças |
 
 **Query params:**
 
-| Parâmetro | Obrigatório | Descrição |
-|-----------|-------------|-----------|
-| `accountId` | não | ID(s) da subconta. Omitir para conta própria. Separar por vírgula para múltiplas |
+| Parâmetro | Exemplo | Obrigatório | Descrição |
+|-----------|---------|-------------|-----------|
+| `dateFrom` | `2026-02-01T00:00:00.000Z` | sim |  |
+| `dateTo` | `2026-02-23T23:59:59.999Z` | sim |  |
+| `page` | `1` | sim |  |
+| `perPage` | `15` | sim |  |
 
 **Respostas:**
 
 <details>
-<summary><code>200</code> — Conta própria</summary>
+<summary><code>200</code> — 200</summary>
 
 ```json
 {
-  "availableBalance": 150.0,
-  "pendingBalance": 30.0,
-  "totalBalance": 180.0
-}
+  "data": [
+    {
+      "status": "PENDING",
+      "createdAt": "2026-02-23T18:46:22.652Z",
+      "chargeId": "cha_1771872382645_qe5j0ohge",
+      "updatedAt": "2026-02-23T18:46:22.652Z",
+      "masterAccountId": "SANDBOX_0438f4c8-0031-7051-16d4-5a23704756b6",
+      "amount": 39.9,
+      "provider": "CELCOIN",
+      "attempts": 1,
+      "emvQrCode": "00020101021226930014br.gov.bcb.pix2571qrcode-h.pix.celcoin.com.br/pixqrcode/v2/b3e3ff8fc93f7c11aa1dfae0a1d29b5204000053039865802BR5909ValidaPix6013Florianopolis62070503***630433A1",
+      "paymentType": "PIX",
+      "subAccountId": "4949228"
+    },
+    {
+      "status": "PENDING",
+      "createdAt": "2026-02-23T18:34:13.130Z",
+      "chargeId": "cha_1771871653130_pzzsyzeha",
+      "updatedAt": "2026-02-23T18:34:13.130Z",
+      "masterAccountId": "SANDBOX_0438f4c8-0031-7051-16d4-5a23704756b6",
+      "amount": 39.9,
+      "provider": "CELCOIN",
+      "attempts": 1,
+      "emvQrCode": "00020101021226930014br.gov.bcb.pix2571qrcode-h.pix.celcoin.com.br/pixqrcode/v2/95f41bdeede9f0be5c23f438ec42935204000053039865802BR5909ValidaPix6013Florianopolis62070503***630426DB",
+      "paymentType": "PIX",
+      "subAccountId": "4949228"
+    },
+    {
+      "status": "PENDING",
+      "createdAt": "2026-02-23T18:34:09.892Z",
+      "chargeId": "cha_1771871649852_mm0luemzr",
+      "updatedAt": "2026-02-23T18:34:09.892Z",
+      "masterAccountId": "SANDBOX_0438f4c8-0031-7051-16d4-5a23704756b6",
+      "amount": 39.9,
+      "provider": "CELCOIN",
+      
+// ... (truncado)
 ```
 
 </details>
 
+
+### Saldo subcontas
+
+```
+GET {{base_url}}/v1/wallet/balance?accountId=9489623
+```
+
+**Escopo necessário:** `wallet/read`
+
+Com esta funcionalidade você pode verificar o saldo de uma ou várias subcontas
+
+> ⚠️ **Atenção:** Para consultar o saldo de várias subcontas envie o header acoountId com o número das subcontas separado por vírgula, por exemplo: 9489623,9489624,9489625
+
+**Query params:**
+
+| Parâmetro | Exemplo | Obrigatório | Descrição |
+|-----------|---------|-------------|-----------|
+| `accountId` | `9489623` | sim | [REQUIRED] Número da subconta. Para consultar o saldo de várias subcontas envie separado por virgula |
+
+**Respostas:**
+
 <details>
-<summary><code>200</code> — Multi-conta (consulta de várias subcontas de servidor para servidor)</summary>
+<summary><code>200</code> — Sucesso</summary>
 
 ```json
 {
@@ -475,6 +1019,22 @@ GET {{base_url}}/v1/wallet/balance?accountId=
 </details>
 
 <details>
+<summary><code>401</code> — Acesso negado</summary>
+
+```json
+{
+  "error": {
+    "message": "Subconta 436514888 nao pertence a esta conta master",
+    "code": "UNAUTHORIZED_SUBACCOUNT",
+    "details": null,
+    "timestamp": "2026-03-17T03:45:53.738Z"
+  }
+}
+```
+
+</details>
+
+<details>
 <summary><code>404</code> — Subconta não encontrada</summary>
 
 ```json
@@ -483,767 +1043,151 @@ GET {{base_url}}/v1/wallet/balance?accountId=
     "message": "Subconta 459013666 nao encontrada",
     "code": "SUBACCOUNT_NOT_FOUND",
     "details": null,
-    "timestamp": "2026-03-17T03:46:49.777Z"
+    "timestamp": "2026-03-17T03:46:49.577Z"
   }
 }
 ```
 
 </details>
 
-
-### Listar Transações
-
-```
-GET {{base_url}}/v1/wallet/transactions
-```
-
-**Escopo necessário:** `wallet/read`
-
-**Query params:**
-
-| Parâmetro | Obrigatório | Descrição |
-|-----------|-------------|-----------|
-| `limit` | não | Itens por página (padrão: 15, máx: 100) |
-| `lastKey` | não | Código de posição retornado pela última consulta, para carregar a próxima página |
-| `startDate` | não | Data início no formato `2026-07-01T00:00:00Z` |
-| `endDate` | não | Data fim no formato `2026-07-01T00:00:00Z` |
-| `type` | não | `CREDIT` ou `DEBIT` |
-| `category` | não | `PAYMENT` \| `PIX_IN` \| `PIX_OUT` \| `WITHDRAWAL` \| `REFUND` \| `FEE` \| `TRANSFER` \| `BOLETO_IN` \| `CARD_IN` |
-| `accountId` | não | ID da subconta (para chamadas feitas de servidor para servidor) |
-
-**Respostas:**
-
-<details>
-<summary><code>200</code> — Sucesso</summary>
-
-```json
-{
-  "items": [
-    {
-      "transactionId": "txn_1773694940975_r10b6fyzm",
-      "type": "CREDIT",
-      "category": "PIX_IN",
-      "amount": 2.56,
-      "balanceAfter": 901.6,
-      "title": "PIX recebido de Malga",
-      "paymentMethod": "PIX",
-      "chargeId": null,
-      "subscriptionId": null,
-      "endToEndId": "E13935893202603162102IfDcitXf0zO",
-      "counterparty": {
-        "name": "Malga",
-        "bank": "13935893",
-        "taxId": "37134852000458",
-        "account": "410900056"
-      },
-      "referenceId": "E139389320260316202IfDyytXf0zO",
-      "description": "PIX recebido direto",
-      "createdAt": "2026-03-16T21:02:20.975Z"
-    }
-  ],
-  "nextPageToken": "eyJTSyI6..."
-}
-```
-
-</details>
-
-
-### Anotar Transação
-
-```
-PATCH {{base_url}}/v1/wallet/transactions/:transactionId
-```
-
-**Escopo necessário:** `wallet/write`
-
-Grava uma observação interna na transação para fins de controle e conciliação.
-
-**Parâmetros de rota:**
-
-| Parâmetro | Descrição |
-|-----------|-----------|
-| `:transactionId` | ID da transação |
-
-**Body (JSON):**
-
-```json
-{
-  "note": "Pagamento referente ao pedido #001"
-}
-```
-
-**Respostas:**
-
-<details>
-<summary><code>200</code> — Sucesso</summary>
-
-```json
-{
-  "transactionId": "txn_xxx",
-  "note": "Pagamento referente ao pedido #001",
-  "message": "Observação salva com sucesso"
-}
-```
-
-</details>
-
-<details>
-<summary><code>404</code> — Não encontrada</summary>
-
-```json
-{
-  "code": "TRANSACTION_NOT_FOUND"
-}
-```
-
-</details>
-
-
-### Listar Recebimentos
-
-```
-GET {{base_url}}/v1/wallet/receivables
-```
-
-**Escopo necessário:** `wallet/read`
-
-Retorna os valores a receber (pagamentos ainda em liquidação) com a data prevista de disponibilização.
-
-**Respostas:**
-
-<details>
-<summary><code>200</code> — Sucesso</summary>
-
-```json
-{
-  "items": [
-    {
-      "amount": 100.0,
-      "expectedDate": "2026-07-01",
-      "status": "PENDING"
-    }
-  ]
-}
-```
-
-</details>
-
-
-### Consultar Agenda do Dia
-
-```
-GET {{base_url}}/v1/wallet/receivables-calendar/:day
-```
-
-**Escopo necessário:** `wallet/read`
-
-**Parâmetros de rota:**
-
-| Parâmetro | Descrição |
-|-----------|-----------|
-| `:day` | Data no formato `YYYY-MM-DD` |
-
-**Respostas:**
-
-<details>
-<summary><code>200</code> — Sucesso</summary>
-
-```json
-{
-  "date": "2026-07-01",
-  "totalAmount": 450.0,
-  "items": [
-    {
-      "chargeId": "cha_xxx",
-      "amount": 100.0,
-      "paymentMethod": "PIX"
-    }
-  ]
-}
-```
-
-</details>
 
 ---
 
-## Saques
+## Checkout Transparente e Hospedado
 
-Transfere o saldo da carteira ValidaPay para uma chave PIX. O saldo disponível deve ser suficiente para cobrir o valor do saque mais as taxas cobradas pela operação.
+Dois modelos de checkout: **Transparente** (`POST /v1/charges`) integra diretamente na sua UI passando os dados de pagamento; **Checkout Session** (`POST /v1/checkouts/session`) gera uma URL hospedada pela ValidaPay onde o cliente finaliza o pagamento.
 
-> ⚠️ **Atenção:** Só é possível fazer saques para contas de mesma titularidade.
-
-### Solicitar Saque
+### Checkout Transparente
 
 ```
-POST {{base_url}}/v1/wallet/withdraw
+POST {{base_url}}/v1/charges
 ```
 
-**Escopo necessário:** `wallet/write`
+**Escopo necessário:** `checkouts/write`
+
+Você envia os dados do cliente, método de pagamento e itens diretamente pela API, sem redirecionar o usuário para uma página externa. Toda a experiência de compra acontece na sua própria interface (site, app, sistema) e envia os dados de pagamento para a ValidaPay.
+
+Métodos de pagamento suportados: `creditcard`, `pix`, `boleto`
+
+Os itens do pedido referenciam preços (`priceId`) previamente cadastrados via rota de produtos. Para pagamentos com cartão de crédito, os dados do cartão devem ser enviados no objeto `card`.
+
+**Campos exclusivos por método:**
+
+| Campo | creditcard | pix | boleto |
+|---|---|---|---|
+| `card` | obrigatório | — | — |
+| `installments` | opcional (1–12) | — | — |
+| `dueDate` (YYYY-MM-DD) | — | opcional | opcional |
+| `expiration` (YYYY-MM-DD) | — | opcional | — |
+| `expirationAfterDueDate` | — | — | opcional (0–60 dias) |
+| `boletoInstructions` | — | — | opcional |
+
+> ⚠️ **`dueDate`**: se omitido para pix/boleto, o sistema usa 30 dias a partir de hoje.  
+> ⚠️ **`expiration`**: vencimento final do PIX COBV; se omitido, deriva de `dueDate + 30 dias`.
+
+Case de uso:
+
+_Como SaaS, quero oferecer assinaturas com pagamento por cartão de crédito diretamente no meu app, sem redirecionar o usuário para outra página. Cadastro meus planos como produtos, e na hora do pagamento envio o priceId do plano escolhido junto com os dados do cartão._
+
+_Como e-commerce, quero oferecer PIX e boleto como opções de pagamento no meu próprio checkout customizado. Monto o carrinho com os priceId dos produtos, coleto os dados do cliente e processo tudo numa única chamada._
 
 **Body (JSON):**
 
 ```json
 {
-  "amount": 500.0,
-  "pixKey": "joao@email.com",
-  "pixKeyType": "EMAIL",
-  "documentNumber": "12345678901",
-  "accountId": null
-}
-```
-
-> **Enums:** pixKeyType: `CPF` | `CNPJ` | `EMAIL` | `PHONE` | `EVP`
-
-**Respostas:**
-
-<details>
-<summary><code>201</code> — Sucesso</summary>
-
-```json
-{
-  "withdrawalId": "wth_xxx",
-  "amount": 500.0,
-  "status": "PROCESSING",
-  "pixKey": "joao@email.com",
-  "createdAt": "2026-01-15T10:30:00Z"
-}
-```
-
-</details>
-
-<details>
-<summary><code>400</code> — Saldo insuficiente</summary>
-
-```json
-{
-  "code": "INSUFFICIENT_BALANCE"
-}
-```
-
-</details>
-
-<details>
-<summary><code>400</code> — Bloqueio por titularidade</summary>
-
-```json
-{
-  "error": {
-    "message": "A chave PIX nao pertence ao titular da conta",
-    "code": "OWNERSHIP_MISMATCH",
-    "details": null,
-    "timestamp": "2026-03-17T04:01:57.811Z"
-  }
-}
-```
-
-</details>
-
-
-### Listar Saques
-
-```
-GET {{base_url}}/v1/wallet/withdrawals
-```
-
-**Escopo necessário:** `wallet/read`
-
-**Query params:**
-
-| Parâmetro | Obrigatório | Descrição |
-|-----------|-------------|-----------|
-| `limit` | não | Itens por página (padrão: 15) |
-| `lastKey` | não | Código de posição retornado pela última consulta, para carregar a próxima página |
-| `startDate` | não | Data início no formato `2026-07-01T00:00:00Z` |
-| `endDate` | não | Data fim no formato `2026-07-01T00:00:00Z` |
-| `accountId` | não | ID da subconta (para chamadas feitas de servidor para servidor) |
-
-**Respostas:**
-
-<details>
-<summary><code>200</code> — Sucesso</summary>
-
-```json
-{
-  "items": [
-    {
-      "withdrawalId": "wth_xxx",
-      "amount": 500.0,
-      "status": "COMPLETED",
-      "pixKey": "joao@email.com",
-      "pixKeyType": "EMAIL",
-      "createdAt": "2026-01-15T10:30:00Z"
+  "paymentMethod": "creditcard",
+  "installments": 5,
+  "passFeesToCustomer": true,
+  "freeInstallments": 0,
+  "dueDate": "2026-07-31",
+  "expiration": "2026-08-30",
+  "expirationAfterDueDate": 30,
+  "boletoInstructions": {
+    "fine": 2,
+    "interest": 1,
+    "discount": {
+      "amount": 5,
+      "modality": "fixed",
+      "limitDate": "2026-07-30"
     }
-  ],
-  "pagination": {
-    "total": 5,
-    "limit": 15,
-    "hasMore": false
-  }
-}
-```
-
-</details>
-
-
-### Transferir via PIX
-
-```
-POST {{base_url}}/v1/wallet/pix-transfer
-```
-
-**Escopo necessário:** `wallet/write`
-
-Realiza uma transferência PIX a partir do saldo da carteira para qualquer conta bancária, sem exigir conta cadastrada previamente.
-
-**Body (JSON):**
-
-```json
-{
-  "amount": 150.0,
-  "pixKey": "11999998888",
-  "pixKeyType": "PHONE",
-  "description": "Pagamento de serviço",
-  "accountId": null
-}
-```
-
-**Respostas:**
-
-<details>
-<summary><code>201</code> — Sucesso</summary>
-
-```json
-{
-  "transferId": "trf_xxx",
-  "amount": 150.0,
-  "status": "PROCESSING",
-  "pixKey": "11999998888",
-  "endToEndId": "E...",
-  "createdAt": "2026-01-15T10:30:00Z"
-}
-```
-
-</details>
-
-<details>
-<summary><code>400</code> — Saldo insuficiente</summary>
-
-```json
-{
-  "code": "INSUFFICIENT_BALANCE"
-}
-```
-
-</details>
-
-
-### Validar Chave PIX
-
-```
-POST {{base_url}}/v1/wallet/dict
-```
-
-**Escopo necessário:** `wallet/read`
-
-Consulta os dados do titular cadastrado para uma chave PIX antes de realizar uma transferência.
-
-**Body (JSON):**
-
-```json
-{
-  "pixKey": "joao@email.com",
-  "pixKeyType": "EMAIL"
-}
-```
-
-**Respostas:**
-
-<details>
-<summary><code>200</code> — Chave válida</summary>
-
-```json
-{
-  "pixKey": "joao@email.com",
-  "pixKeyType": "EMAIL",
-  "owner": {
-    "name": "João da Silva",
-    "taxId": "***.456.789-**",
-    "type": "NATURAL_PERSON"
   },
-  "account": {
-    "ispb": "12345678",
-    "bankName": "Banco X",
-    "branch": "0001",
-    "accountNumber": "123456-7",
-    "accountType": "CACC"
-  }
-}
-```
-
-</details>
-
-<details>
-<summary><code>404</code> — Chave não encontrada</summary>
-
-```json
-{
-  "code": "PIX_KEY_NOT_FOUND"
-}
-```
-
-</details>
-
----
-
-## Reembolsos
-
-Estorno total ou parcial de cobranças já pagas. O campo `reason` categoriza o motivo do estorno para fins de exigências regulatórias.
-
-### Solicitar Reembolso
-
-```
-POST {{base_url}}/v1/wallet/refunds
-```
-
-**Escopo necessário:** `wallet/write`
-
-> ⚠️ **Códigos de motivo obrigatórios:** `BANK_ERROR` | `FRAUD` | `CUSTOMER_REQUEST` | `PIX_CHANGE_ERROR`
-
-Para PIX, informe o `endToEndId`. Para cartão, informe o `chargeId`.
-
-**Body (JSON):**
-
-```json
-{
-  "endToEndId": "E00000000202401150000000000000001",
-  "amount": 100.0,
-  "reason": "CUSTOMER_REQUEST",
-  "chargeId": "cha_xxx",
-  "accountId": null
-}
-```
-
-**Respostas:**
-
-<details>
-<summary><code>201</code> — Sucesso</summary>
-
-```json
-{
-  "refundId": "ref_1774437918293_jm2hen5y7",
-  "status": "PROCESSING",
-  "amount": 100.0,
-  "reason": "CUSTOMER_REQUEST",
-  "endToEndId": "E003603052026032511186a4f4cdf139",
-  "returnIdentification": "D13935893202603251125zbRSLI3lqPH",
-  "chargeId": "cha_1774437468463_4hj927ips",
-  "createdAt": "2026-03-25T11:25:18.293Z"
-}
-```
-
-</details>
-
-<details>
-<summary><code>400</code> — Valor excede o disponível</summary>
-
-```json
-{
-  "error": {
-    "message": "Valor do estorno excede o valor disponível para devolução",
-    "code": "REFUND_AMOUNT_EXCEEDED",
-    "details": null,
-    "timestamp": "2026-06-10T10:00:00.000Z"
-  }
-}
-```
-
-</details>
-
-<details>
-<summary><code>401</code> — Não autorizado</summary>
-
-```json
-{
-  "error": {
-    "message": "Subconta nao pertence a esta conta",
-    "code": "OWNERSHIP_MISMATCH",
-    "details": null,
-    "timestamp": "2026-03-25T11:28:25.397Z"
-  }
-}
-```
-
-</details>
-
-
-### Consultar Reembolso
-
-```
-GET {{base_url}}/v1/wallet/refunds
-```
-
-**Escopo necessário:** `wallet/read`
-
-**Query params:**
-
-| Parâmetro | Obrigatório | Descrição |
-|-----------|-------------|-----------|
-| `limit` | não | Itens por página (padrão: 15) |
-| `lastKey` | não | Código de posição retornado pela última consulta, para carregar a próxima página |
-| `startDate` | não | Data início no formato `2026-07-01T00:00:00Z` |
-| `endDate` | não | Data fim no formato `2026-07-01T00:00:00Z` |
-| `accountId` | não | ID da subconta (para chamadas feitas de servidor para servidor) |
-
-**Respostas:**
-
-<details>
-<summary><code>200</code> — Sucesso</summary>
-
-```json
-{
+  "customer": {
+    "name": "Isaac Newton",
+    "email": "isaac.newton@validapay.com.br",
+    "documentNumber": "12345678920",
+    "phone": "11975896541",
+    "address": {
+      "type": "BILLING",
+      "street": "Rua das Flores",
+      "number": "123",
+      "complement": "Apto 45",
+      "neighborhood": "Centro",
+      "city": "Florianópolis",
+      "state": "SC",
+      "zipCode": "88010000",
+      "country": "BR",
+      "cityCode": "4205407"
+    }
+  },
+  "card": {
+    "number": "5230552482605921",
+    "cvv": "100",
+    "name": "Issac Newton",
+    "expiration": "12/2030"
+  },
   "items": [
     {
-      "refundId": "ref_xxx",
-      "status": "COMPLETED",
-      "amount": 100.0,
-      "reason": "CUSTOMER_REQUEST",
-      "chargeId": "cha_xxx",
-      "endToEndId": "E...",
-      "createdAt": "2026-01-15T10:30:00Z"
+      "priceId": "price_1769679249534_3hhtbkmkj",
+      "quantity": 1
     }
   ],
-  "pagination": {
-    "total": 3,
-    "limit": 15,
-    "hasMore": false
+  "metadata": {
+    "source": "website"
+  }
+}
+```
+
+**Respostas:**
+
+<details>
+<summary><code>404</code> — 404</summary>
+
+```json
+{
+  "error": {
+    "message": "Price price_1769550554939_2litgla99 não encontrado",
+    "code": "PRICE_NOT_FOUND",
+    "details": null,
+    "timestamp": "2026-01-28T11:10:54.750Z"
   }
 }
 ```
 
 </details>
 
----
-
-## Webhooks
-
-Gerenciamento das URLs que recebem notificações automáticas quando eventos importantes acontecem na conta, como pagamentos, cancelamentos e renovações de assinatura.
-
-**Eventos disponíveis:** `charge.created`, `charge.paid`, `charge.canceled`, `charge.archived`, `charge.refunded`, `payment.success`, `payment.failed`, `subscription.created`, `subscription.activated`, `subscription.canceled`, `subscription.renewed`, `subscription.past_due`
-
-### Criar Webhook
-
-```
-POST {{base_url}}/v1/users/webhooks
-```
-
-**Body (JSON):**
-
-```json
-{
-  "url": "https://meusite.com/webhook",
-  "events": [
-    "charge.created",
-    "payment.success",
-    "payment.failed",
-    "subscription.created",
-    "subscription.activated",
-    "subscription.canceled",
-    "subscription.renewed"
-  ],
-  "authToken": "meu-token-secreto"
-}
-```
-
-**Respostas:**
-
 <details>
-<summary><code>201</code> — Criado</summary>
-
-```json
-{
-  "webhookId": "wh_xxx",
-  "url": "https://meusite.com/webhook",
-  "events": ["payment.success"],
-  "status": "active",
-  "createdAt": "2026-01-15T10:30:00Z"
-}
-```
-
-</details>
-
-<details>
-<summary><code>400</code> — URL inválida</summary>
-
-```json
-{
-  "code": "VALIDATION_ERROR",
-  "message": "URL inválida"
-}
-```
-
-</details>
-
-
-### Listar Webhooks
-
-```
-GET {{base_url}}/v1/users/webhooks
-```
-
-**Respostas:**
-
-<details>
-<summary><code>200</code> — Sucesso</summary>
-
-```json
-[
-  {
-    "webhookId": "wh_xxx",
-    "url": "https://meusite.com/webhook",
-    "events": [],
-    "status": "active"
-  }
-]
-```
-
-</details>
-
-
-### Buscar Webhook
-
-```
-GET {{base_url}}/v1/users/webhooks/:id
-```
-
-**Parâmetros de rota:**
-
-| Parâmetro | Descrição |
-|-----------|-----------|
-| `:id` | ID do webhook |
-
-**Respostas:**
-
-<details>
-<summary><code>200</code> — Sucesso</summary>
-
-```json
-{
-  "webhookId": "wh_xxx",
-  "url": "https://meusite.com/webhook",
-  "events": [],
-  "status": "active"
-}
-```
-
-</details>
-
-<details>
-<summary><code>404</code> — Não encontrado</summary>
-
-```json
-{
-  "code": "WEBHOOK_NOT_FOUND"
-}
-```
-
-</details>
-
-
-### Atualizar Webhook
-
-```
-PUT {{base_url}}/v1/users/webhooks/:id
-```
-
-**Parâmetros de rota:**
-
-| Parâmetro | Descrição |
-|-----------|-----------|
-| `:id` | ID do webhook |
-
-**Body (JSON):**
-
-```json
-{
-  "url": "https://meusite.com/novo-webhook",
-  "events": ["payment.success", "payment.failed"],
-  "status": "active",
-  "authToken": "novo-token"
-}
-```
-
-**Respostas:**
-
-<details>
-<summary><code>200</code> — Atualizado</summary>
-
-```json
-{
-  "webhookId": "wh_xxx",
-  "url": "https://meusite.com/novo-webhook",
-  "status": "active"
-}
-```
-
-</details>
-
-
-### Remover Webhook
-
-```
-DELETE {{base_url}}/v1/users/webhooks/:id
-```
-
-**Parâmetros de rota:**
-
-| Parâmetro | Descrição |
-|-----------|-----------|
-| `:id` | ID do webhook |
-
-**Respostas:**
-
-<details>
-<summary><code>200</code> — Removido</summary>
-
-```json
-{
-  "message": "Deletado com sucesso"
-}
-```
-
-</details>
-
-
-### Testar Webhook
-
-```
-POST {{base_url}}/v1/users/webhooks/test
-```
-
-Envia um evento de teste para a URL configurada, permitindo verificar se as notificações estão sendo recebidas corretamente.
-
-**Body (JSON):**
-
-```json
-{
-  "webhookId": "wh_xxx",
-  "entity": "payment.success"
-}
-```
-
-**Respostas:**
-
-<details>
-<summary><code>200</code> — Sucesso</summary>
+<summary><code>200</code> — 200</summary>
 
 ```json
 {
   "success": true,
-  "url": "https://meusite.com/webhook",
-  "event": "payment.success",
-  "payload": {},
-  "response": {
-    "statusCode": 200
+  "customerId": "cus_1772230075378_21n6ykyb9",
+  "paymentId": "sandbox_card_17723961707554498"
+}
+```
+
+</details>
+
+<details>
+<summary><code>200</code> — 200</summary>
+
+```json
+{
+  "success": true,
+  "customerId": "cus_1772230075378_21n6ykyb9",
+  "chargeId": "cha_1772398220843_9ovrhe4po",
+  "pix": {
+    "emv": "00020126330014br.gov.bcb.pix01110000000000052040000530398654089.905802BR5925VALIDAPAY SANDBOX6014SAO PAULO62070503***63044BDX"
   }
 }
 ```
@@ -1251,108 +1195,20 @@ Envia um evento de teste para a URL configurada, permitindo verificar se as noti
 </details>
 
 <details>
-<summary><code>400</code> — Falha</summary>
+<summary><code>200</code> — 200 — Boleto</summary>
 
 ```json
 {
-  "success": false,
-  "error": "Connection refused"
+  "chargeId": "cha_1780000000001_xyz789",
+  "digitableLine": "03399.00000 00000.000000 00000.000000 1 00000000025000",
+  "barCode": "03391000000000000000000000000000100000002500000",
+  "dueDate": "2026-07-31",
+  "pdfUrl": "/v1/charges/cha_1780000000001_xyz789/boleto.pdf"
 }
 ```
 
 </details>
 
-
-### Listar Eventos
-
-```
-GET {{base_url}}/v1/users/webhooks/events
-```
-
-**Query params:**
-
-| Parâmetro | Obrigatório | Descrição |
-|-----------|-------------|-----------|
-| `limit` | não | Itens por página (padrão: 50) |
-| `nextPageToken` | não | Código de posição retornado pela última consulta, para carregar a próxima página |
-| `type` | não | Filtro por tipo de evento |
-
-**Respostas:**
-
-<details>
-<summary><code>200</code> — Sucesso</summary>
-
-```json
-{
-  "items": [
-    {
-      "eventId": "evt_xxx",
-      "webhookId": "wh_xxx",
-      "type": "payment.success",
-      "status": "success",
-      "attempt": 1,
-      "responseStatusCode": 200,
-      "createdAt": "2026-01-15T10:30:00Z"
-    }
-  ],
-  "count": 10,
-  "total": 100,
-  "hasMore": true,
-  "nextPageToken": "eyJ..."
-}
-```
-
-</details>
-
-
-### Reprocessar Evento
-
-```
-POST {{base_url}}/v1/users/webhooks/events/:id/retry
-```
-
-Reenvia a notificação de um evento que não foi entregue ou precisa ser reprocessado.
-
-**Parâmetros de rota:**
-
-| Parâmetro | Descrição |
-|-----------|-----------|
-| `:id` | ID do evento |
-
-**Respostas:**
-
-<details>
-<summary><code>200</code> — Reenviado</summary>
-
-```json
-{
-  "message": "Webhook reenviado com sucesso",
-  "webhookEventId": "evt_xxx",
-  "attempt": 2,
-  "status": "success"
-}
-```
-
-</details>
-
-<details>
-<summary><code>404</code> — Evento não encontrado</summary>
-
-```json
-{
-  "code": "WEBHOOK_EVENT_NOT_FOUND"
-}
-```
-
-</details>
-
----
-
-## Produtos e Preços
-
-Um **Produto** representa um serviço ou plano (ex.: "Plano Pro"). Cada produto tem um ou mais **Preços** (`prices`), que definem o valor e a recorrência. Os preços são usados para criar assinaturas e checkouts.
-
-**Tipos de recorrência:** `ONE_TIME` | `WEEKLY` | `MONTHLY` | `QUARTERLY` | `SEMIANNUAL` | `YEARLY`
 
 ### Criar Produto
 
@@ -1362,29 +1218,47 @@ POST {{base_url}}/v1/products
 
 **Escopo necessário:** `products/write`
 
+Cria um novo produto vinculado a sua conta. Os produtos criados ficam disponíveis no painel administrativo e podem ser utilizados tanto no checkout transparente (via API) quanto no checkout pro (link de pagamento). Ao criar um produto, voce pode associar um ou mais preços (prices), incluindo configurações de recorrência para cobranças periódicas, conforme abaixo:
+
+- ONE_TIME → "Avulsa"
+    
+- MONTHLY → "Mensal"
+    
+- WEEKLY → "Semanal"
+    
+- QUARTERLY → "Trimestral"
+    
+- YEARLY → "Anual"
+    
+
+Case de uso:
+
+_Como SaaS, quero cadastrar meus planos (ex: Básico, Pro, Enterprise) como produtos com preços recorrentes, para que meus clientes possam assinar diretamente pelo checkout pro ou pela minha própria interface integrada via checkout transparente._
+
+_Como marketplace, quero cadastrar os servicos oferecidos como produtos avulsos com preço fixo, para gerar cobranças pontuais aos compradores_
+
 **Body (JSON):**
 
 ```json
 {
-  "name": "Plano Pro",
-  "description": "Acesso completo à plataforma",
+  "name": "SESSION TESTE 7",
+  "description": "Teste avulso",
   "statementDescriptor": "VALIDAPAY TESTE",
   "metadata": {
     "externalId": "plan_abc123"
   },
   "prices": [
     {
-      "title": "Mensal",
-      "recurrenceType": "MONTHLY",
-      "description": "Cobrança mensal",
-      "amount": 99.9,
-      "trialDays": 7
+      "title": "Avulso Preço Normal",
+      "recurrenceType": "ONE_TIME",
+      "description": "Avulso",
+      "amount": 100
     },
     {
-      "title": "Avulso",
+      "title": "Avulso Black Friday",
       "recurrenceType": "ONE_TIME",
-      "description": "Compra única",
-      "amount": 199.9
+      "description": "Avulso preço promocional",
+      "amount": 89.9
     }
   ]
 }
@@ -1393,12 +1267,12 @@ POST {{base_url}}/v1/products
 **Respostas:**
 
 <details>
-<summary><code>200</code> — Produto criado</summary>
+<summary><code>200</code> — 200</summary>
 
 ```json
 {
   "productId": "prod_1772275462312_lsopu8ntr",
-  "name": "Plano Pro",
+  "name": "Plano Pro 3",
   "description": "Acesso completo à plataforma",
   "type": "RECURRING",
   "billingPeriod": "MONTHLY",
@@ -1417,7 +1291,7 @@ POST {{base_url}}/v1/products
       "productId": "prod_1772275462312_lsopu8ntr",
       "title": "Mensal",
       "description": "Cobrança mensal",
-      "amount": 99.9,
+      "amount": 400,
       "recurrenceType": "MONTHLY",
       "recurrenceInterval": 1,
       "trialDays": 7,
@@ -1432,7 +1306,7 @@ POST {{base_url}}/v1/products
 </details>
 
 
-### Listar Produtos
+### Listar produtos
 
 ```
 GET {{base_url}}/v1/products
@@ -1440,63 +1314,169 @@ GET {{base_url}}/v1/products
 
 **Escopo necessário:** `products/read`
 
-**Query params:**
-
-| Parâmetro | Obrigatório | Descrição |
-|-----------|-------------|-----------|
-| `limit` | não | Itens por página (padrão: 50) |
-| `lastKey` | não | Código de posição retornado pela última consulta, para carregar a próxima página |
-| `status` | não | Filtro por status (`active`, `archived`) |
-| `search` | não | Busca por nome |
+Liste todos os produtos criados
 
 **Respostas:**
 
 <details>
-<summary><code>200</code> — Sucesso</summary>
+<summary><code>200</code> — 200</summary>
 
 ```json
 [
   {
+    "updatedAt": "2026-02-28T10:44:22.312Z",
+    "name": "Plano Pro 3",
+    "billingPeriod": "MONTHLY",
     "productId": "prod_1772275462312_lsopu8ntr",
-    "name": "Plano Pro",
     "status": "active",
+    "emitirNf": false,
     "currency": "BRL",
+    "statementDescriptor": "VALIDAPAY TESTE",
+    "description": "Acesso completo à plataforma",
     "type": "RECURRING",
+    "accountId": "SANDBOX_e4286468-4031-70c9-91e4-d3f5b3ac69af",
     "createdAt": "2026-02-28T10:44:22.312Z",
+    "metadata": {
+      "externalId": "plan_abc123"
+    },
     "prices": [
       {
-        "priceId": "price_1772275462439_ztt2gcewl",
+        "description": "Cobrança mensal",
+        "fiscal": null,
+        "updatedAt": "2026-02-28T10:44:22.439Z",
+        "accountNumber": "SANDBOX_e4286468-4031-70c9-91e4-d3f5b3ac69af",
+        "isActive": true,
+        "discounts": [],
+        "trialDays": 7,
+        "currency": "BRL",
+        "recurrenceInterval": 1,
         "title": "Mensal",
-        "amount": 99.9,
+        "position": null,
+        "priceSchedule": null,
         "recurrenceType": "MONTHLY",
-        "isActive": true
+        "priceId": "price_1772275462439_ztt2gcewl",
+        "productId": "prod_1772275462312_lsopu8ntr",
+        "amount": 400,
+        "statementDescriptor": "Mensal",
+        "createdAt": "2026-02-28T10:44:22.439Z",
+        "hasSales": false
       }
     ]
-  }
-]
+  },
+  {
+    "productId": "prod_1772229816024_r0d93gdib",
+    "createdAt": "2026-02-27T22:03:36.024Z",
+    "billingPeriod": "MONTHLY",
+    "status": "active",
+    "emitirNf": false,
+    "currency": "BRL",
+    "updatedAt": "2026-02-27T22:03:36.024Z",
+    
+// ... (truncado)
 ```
 
 </details>
 
 
-### Buscar Produto
+### Checkout Session
 
 ```
-GET {{base_url}}/v1/products/:id
+POST {{base_url}}/v1/checkouts/session
+```
+
+**Escopo necessário:** `checkouts/write`
+
+Esta rota cria uma sessão de pagamento e retorna um link para a página de pagamento hospedada pela ValidaPay. Ao compartilhar ou redirecionar o cliente para esse link, ele será direcionado a uma interface segura onde poderá concluir o pagamento.
+
+Para criar uma sessão, informe o priceId de um preço previamente cadastrado. Opcionalmente, você pode enviar os dados do cliente (customer) e restringir os métodos de pagamento aceitos (allowedPaymentMethods).
+
+A resposta inclui o id da sessao e uma url de pagamento que pode ser utilizada como fallback ou redirecionamento.
+
+Metodos de pagamento suportados: creditcard, pix, boleto
+
+> ⚠️ **Atenção:** Uma sessao de checkout so pode ser paga uma unica vez. Apos o pagamento bem-sucedido, a sessao e marcada como completed e novas tentativas de pagamento não serão possíveis. 
+  
+
+Case de uso:
+
+_Como SaaS, quero gerar um link de pagamento exclusivo para cada cliente no momento da contratacao do plano. Crio uma sessao com o priceId do plano escolhido e redireciono o cliente para a URL retornada. Apos o pagamento, a sessao e encerrada automaticamente, garantindo que o mesmo link nao seja utilizado novamente._
+
+_Como plataforma de servicos, quero enviar um link de pagamento por email ou WhatsApp para cada orçamento aprovado. Cada sessao corresponde a um pagamento unico, evitando cobranças duplicadas._
+
+**Body (JSON):**
+
+```json
+{
+  "priceId": "price_1772389525023_dd9gsj4uw",
+  "allowedPaymentMethods": [
+    "pix",
+    "creditcard"
+  ],
+  "customer": {
+    "email": "teste@validapay.com.com",
+    "documentNumber": "00900790270"
+  }
+}
+```
+
+**Respostas:**
+
+<details>
+<summary><code>200</code> — 200</summary>
+
+```json
+{
+  "id": "SANDBOX_cs_1772391984588_r4lzc2h8w",
+  "url": "https://app.validapay.com.br/pagamento/SANDBOX_cs_1772391984588_r4lzc2h8w",
+  "priceId": "price_1772391951373_rfu2y02g1"
+}
+```
+
+</details>
+
+<details>
+<summary><code>404</code> — 404 — Price não encontrado</summary>
+
+```json
+{
+  "error": {
+    "message": "Price price_xxxx não encontrado",
+    "code": "PRICE_NOT_FOUND",
+    "details": null,
+    "timestamp": "2026-06-10T10:00:00.000Z"
+  }
+}
+```
+
+</details>
+
+
+---
+
+## Produtos e Preços
+
+Um **Produto** representa um serviço ou plano (ex.: "Plano Pro"). Cada produto tem um ou mais **Preços** (`prices`), que definem o valor e a recorrência. Os preços são usados para criar assinaturas. Um produto pode ser arquivado (oculto) sem ser deletado.
+
+### Buscar produto
+
+```
+GET {{base_url}}/v1/products/:productId
 ```
 
 **Escopo necessário:** `products/read`
+
+Retorna os detalhes completos de um produto, incluindo todos os preços vinculados.
 
 **Parâmetros de rota:**
 
 | Parâmetro | Descrição |
 |-----------|-----------|
-| `:id` | ID do produto |
+| `:productId` | ID do recurso |
 
 **Respostas:**
 
 <details>
-<summary><code>200</code> — Produto encontrado</summary>
+<summary><code>200</code> — 200 — Produto encontrado</summary>
 
 ```json
 {
@@ -1523,7 +1503,8 @@ GET {{base_url}}/v1/products/:id
       "recurrenceInterval": 1,
       "trialDays": 7,
       "isActive": true,
-      "discounts": []
+      "discounts": [],
+      "statementDescriptor": "Mensal"
     }
   ]
 }
@@ -1532,7 +1513,7 @@ GET {{base_url}}/v1/products/:id
 </details>
 
 <details>
-<summary><code>404</code> — Produto não encontrado</summary>
+<summary><code>404</code> — 404 — Produto não encontrado</summary>
 
 ```json
 {
@@ -1548,21 +1529,117 @@ GET {{base_url}}/v1/products/:id
 </details>
 
 
-### Atualizar Produto
+### Criar Produto
 
 ```
-PUT {{base_url}}/v1/products/:id
+POST {{base_url}}/v1/products
 ```
 
 **Escopo necessário:** `products/write`
 
-Para preços, inclua `priceId` para atualizar um existente ou omita para criar um novo.
+Cria um novo produto vinculado a sua conta. Os produtos criados ficam disponíveis no painel administrativo e podem ser utilizados tanto no checkout transparente (via API) quanto no checkout pro (link de pagamento). Ao criar um produto, voce pode associar um ou mais preços (prices), incluindo configurações de recorrência para cobranças periódicas, conforme abaixo:
+
+- ONE_TIME → "Avulsa"
+    
+- MONTHLY → "Mensal"
+    
+- WEEKLY → "Semanal"
+    
+- QUARTERLY → "Trimestral"
+    
+- YEARLY → "Anual"
+    
+
+Case de uso:
+
+_Como SaaS, quero cadastrar meus planos (ex: Básico, Pro, Enterprise) como produtos com preços recorrentes, para que meus clientes possam assinar diretamente pelo checkout pro ou pela minha própria interface integrada via checkout transparente._
+
+_Como marketplace, quero cadastrar os servicos oferecidos como produtos avulsos com preço fixo, para gerar cobranças pontuais aos compradores_
+
+**Body (JSON):**
+
+```json
+{
+  "name": "SESSION TESTE 7",
+  "description": "Teste avulso",
+  "statementDescriptor": "VALIDAPAY TESTE",
+  "metadata": {
+    "externalId": "plan_abc123"
+  },
+  "prices": [
+    {
+      "title": "Avulso Preço Normal",
+      "recurrenceType": "ONE_TIME",
+      "description": "Avulso",
+      "amount": 100
+    },
+    {
+      "title": "Avulso Black Friday",
+      "recurrenceType": "ONE_TIME",
+      "description": "Avulso preço promocional",
+      "amount": 89.9
+    }
+  ]
+}
+```
+
+**Respostas:**
+
+<details>
+<summary><code>200</code> — 200</summary>
+
+```json
+{
+  "productId": "prod_1772275462312_lsopu8ntr",
+  "name": "Plano Pro 3",
+  "description": "Acesso completo à plataforma",
+  "type": "RECURRING",
+  "billingPeriod": "MONTHLY",
+  "currency": "BRL",
+  "status": "active",
+  "emitirNf": false,
+  "metadata": {
+    "externalId": "plan_abc123"
+  },
+  "statementDescriptor": "VALIDAPAY TESTE",
+  "createdAt": "2026-02-28T10:44:22.312Z",
+  "updatedAt": "2026-02-28T10:44:22.312Z",
+  "prices": [
+    {
+      "priceId": "price_1772275462439_ztt2gcewl",
+      "productId": "prod_1772275462312_lsopu8ntr",
+      "title": "Mensal",
+      "description": "Cobrança mensal",
+      "amount": 400,
+      "recurrenceType": "MONTHLY",
+      "recurrenceInterval": 1,
+      "trialDays": 7,
+      "isActive": true,
+      "discounts": [],
+      "statementDescriptor": "Mensal"
+    }
+  ]
+}
+```
+
+</details>
+
+
+### Atualizar produto
+
+```
+PUT {{base_url}}/v1/products/:productId
+```
+
+**Escopo necessário:** `products/write`
+
+Atualiza os dados de um produto existente. Para preços, inclua `priceId` para atualizar um preço existente ou omita para criar um novo preço.
 
 **Parâmetros de rota:**
 
 | Parâmetro | Descrição |
 |-----------|-----------|
-| `:id` | ID do produto |
+| `:productId` | ID do recurso |
 
 **Body (JSON):**
 
@@ -1584,10 +1661,12 @@ Para preços, inclua `priceId` para atualizar um existente ou omita para criar u
 }
 ```
 
+> **Enums:** recurrenceType: ONE_TIME | WEEKLY | MONTHLY | QUARTERLY | SEMIANNUAL | YEARLY
+
 **Respostas:**
 
 <details>
-<summary><code>200</code> — Produto atualizado</summary>
+<summary><code>200</code> — 200 — Produto atualizado</summary>
 
 ```json
 {
@@ -1600,27 +1679,43 @@ Para preços, inclua `priceId` para atualizar um existente ou omita para criar u
 
 </details>
 
+<details>
+<summary><code>404</code> — 404 — Produto não encontrado</summary>
 
-### Remover Produto
+```json
+{
+  "error": {
+    "message": "Produto prod_xxxx não encontrado",
+    "code": "PRODUCT_NOT_FOUND",
+    "details": null,
+    "timestamp": "2026-06-10T10:00:00.000Z"
+  }
+}
+```
+
+</details>
+
+
+### Deletar produto
 
 ```
-DELETE {{base_url}}/v1/products/:id
+DELETE {{base_url}}/v1/products/:productId
 ```
 
 **Escopo necessário:** `products/write`
 
-Não é possível remover produtos com assinaturas ativas.
+Deleta um produto. Não é possível deletar produtos que possuam assinaturas ativas.
 
 **Parâmetros de rota:**
 
 | Parâmetro | Descrição |
 |-----------|-----------|
-| `:id` | ID do produto |
+| `:productId` | ID do recurso |
 
 **Respostas:**
 
 <details>
-<summary><code>200</code> — Removido</summary>
+<summary><code>200</code> — 200 — Produto deletado</summary>
 
 ```json
 {
@@ -1632,7 +1727,7 @@ Não é possível remover produtos com assinaturas ativas.
 </details>
 
 <details>
-<summary><code>400</code> — Assinaturas ativas</summary>
+<summary><code>400</code> — 400 — Assinaturas ativas</summary>
 
 ```json
 {
@@ -1647,27 +1742,43 @@ Não é possível remover produtos com assinaturas ativas.
 
 </details>
 
+<details>
+<summary><code>404</code> — 404 — Produto não encontrado</summary>
 
-### Arquivar Produto
+```json
+{
+  "error": {
+    "message": "Produto prod_xxxx não encontrado",
+    "code": "PRODUCT_NOT_FOUND",
+    "details": null,
+    "timestamp": "2026-06-10T10:00:00.000Z"
+  }
+}
+```
+
+</details>
+
+
+### Arquivar produto
 
 ```
-POST {{base_url}}/v1/products/:id/archive
+POST {{base_url}}/v1/products/:productId/archive
 ```
 
 **Escopo necessário:** `products/write`
 
-Produtos arquivados não ficam disponíveis para novas cobranças, mas as assinaturas existentes continuam funcionando.
+Arquiva um produto. Produtos arquivados não ficam disponíveis para novas cobranças, mas as assinaturas e checkouts existentes continuam funcionando normalmente.
 
 **Parâmetros de rota:**
 
 | Parâmetro | Descrição |
 |-----------|-----------|
-| `:id` | ID do produto |
+| `:productId` | ID do recurso |
 
 **Respostas:**
 
 <details>
-<summary><code>200</code> — Arquivado</summary>
+<summary><code>200</code> — 200 — Produto arquivado</summary>
 
 ```json
 {
@@ -1679,46 +1790,78 @@ Produtos arquivados não ficam disponíveis para novas cobranças, mas as assina
 
 </details>
 
+<details>
+<summary><code>404</code> — 404 — Produto não encontrado</summary>
+
+```json
+{
+  "error": {
+    "message": "Produto prod_xxxx não encontrado",
+    "code": "PRODUCT_NOT_FOUND",
+    "details": null,
+    "timestamp": "2026-06-10T10:00:00.000Z"
+  }
+}
+```
+
+</details>
+
+
 ---
 
-## Clientes
+## Saques
 
-Cadastro e gestão centralizada dos dados dos compradores.
+Transferência do saldo da carteira ValidaPay para uma chave PIX. Dois modos: saque **imediato** (processa na hora) e **agendado** (define uma data futura). O saldo deve ser suficiente para cobrir o valor + tarifas.
 
-### Criar Cliente
+### Saque subconta
 
 ```
-POST {{base_url}}/v1/customers
+POST {{base_url}}/v1/wallet/withdraw
 ```
 
-**Escopo necessário:** `customers/write`
+**Escopo necessário:** `wallet/write`
+
+Com esta funcionalidade você pode criar um saque em uma subconta associada à sua _master account._
+
+> ⚠️ **Atenção:** Só é possível fazer saques para contas de mesma titularidade
 
 **Body (JSON):**
 
 ```json
 {
-  "name": "João da Silva",
-  "phone": "+5511999998888",
-  "email": "joao@email.com",
-  "document": "12345678901",
-  "upsert": false
+  "amount": 1.0,
+  "pixKey": "12345678925",
+  "pixKeyType": "CPF",
+  "accountId": "258965356"
 }
 ```
-
-> `upsert: true` atualiza o cadastro se o documento já existir; caso contrário, cria um novo cliente.
 
 **Respostas:**
 
 <details>
-<summary><code>201</code> — Criado</summary>
+<summary><code>200</code> — Sucesso</summary>
 
 ```json
 {
-  "customer": {
-    "customerId": "cus_xxx",
-    "name": "João da Silva",
-    "document": "12345678901",
-    "createdAt": "2026-01-15T10:30:00Z"
+  "withdrawalId": "wdr_1772883158760_tdhomd8xe",
+  "status": "PROCESSING",
+  "amount": 1,
+  "accountNumber": "258965356"
+}
+```
+
+</details>
+
+<details>
+<summary><code>401</code> — Acesso negado</summary>
+
+```json
+{
+  "error": {
+    "message": "Subconta nao pertence a esta conta",
+    "code": "OWNERSHIP_MISMATCH",
+    "details": null,
+    "timestamp": "2026-03-17T04:01:14.653Z"
   }
 }
 ```
@@ -1726,35 +1869,104 @@ POST {{base_url}}/v1/customers
 </details>
 
 <details>
-<summary><code>400</code> — Já existe</summary>
+<summary><code>400</code> — Bloqueio por titularidade</summary>
 
 ```json
 {
-  "code": "CUSTOMER_ALREADY_EXISTS"
+  "error": {
+    "message": "A chave PIX nao pertence ao titular da conta",
+    "code": "OWNERSHIP_MISMATCH",
+    "details": null,
+    "timestamp": "2026-03-17T04:01:57.811Z"
+  }
 }
 ```
 
 </details>
 
 
-### Listar Clientes
+### Saque master account
 
 ```
-GET {{base_url}}/v1/customers
+POST {{base_url}}/v1/wallet/withdraw
 ```
 
-**Escopo necessário:** `customers/read`
+**Escopo necessário:** `wallet/write`
+
+Com esta funcionalidade você pode criar um saque da sua _conta ValidaPay._
+
+> ⚠️ **Atenção:** Só é possível fazer saques para contas de mesma titularidade
+
+**Body (JSON):**
+
+```json
+{
+  "amount": 1.0,
+  "pixKey": "12345678925",
+  "pixKeyType": "CPF"
+}
+```
+
+**Respostas:**
+
+<details>
+<summary><code>200</code> — Sucesso</summary>
+
+```json
+{
+  "withdrawalId": "wdr_1772883158760_tdhomd8xe",
+  "status": "PROCESSING",
+  "amount": 1,
+  "accountNumber": "258965356"
+}
+```
+
+</details>
+
+<details>
+<summary><code>400</code> — Bloqueio por titularidade</summary>
+
+```json
+{
+  "error": {
+    "message": "A chave PIX nao pertence ao titular da conta",
+    "code": "OWNERSHIP_MISMATCH",
+    "details": null,
+    "timestamp": "2026-03-17T04:01:57.811Z"
+  }
+}
+```
+
+</details>
+
+
+---
+
+## Extratos / Transações
+
+Consulta o histórico de movimentações financeiras da carteira. Usa paginação por cursor (`nextPageToken`). Suporta filtro por tipo de movimentação (`CREDIT`/`DEBIT`), categoria, e intervalo de datas.
+
+### Extrato subconta
+
+```
+GET {{base_url}}/v1/wallet/transactions?accountId={{account_number}}&type=CREDIT&category=PAYMENT&dateFrom=2026-03-01T00:00:00Z&dateTo=2026-03-16T23:00:00Z&limit=5&nextPageToken=eyJTSyI6IjIwMjYtMDMtMTRUMjM6MjM6MzYuMDk2WiN0eG5fMTc3MzUzMDYxNjA5Nl8zOXdmbTk5aTQiLCJhY2NvdW50SWQiOiI0MjkxMzEyMTIifQ
+```
+
+**Escopo necessário:** `wallet/read`
+
+Com esta funcionalidade você pode isualizar movimentações em uma subconta associada a sua _master account_
 
 **Query params:**
 
-| Parâmetro | Obrigatório | Descrição |
-|-----------|-------------|-----------|
-| `limit` | não | Itens por página (padrão: 15) |
-| `lastKey` | não | Código de posição retornado pela última consulta, para carregar a próxima página |
-| `startDate` | não | Data de criação início no formato `2026-07-01T00:00:00Z` |
-| `endDate` | não | Data de criação fim no formato `2026-07-01T00:00:00Z` |
-| `document` | não | CPF ou CNPJ do cliente (texto exato, sem busca parcial) |
-| `search` | não | Busca por nome ou e-mail |
+| Parâmetro | Exemplo | Obrigatório | Descrição |
+|-----------|---------|-------------|-----------|
+| `accountId` | `{{account_number}}` | sim | required - ID da subconta a consultar |
+| `type` | `CREDIT` | sim | optional — CREDIT | DEBIT |
+| `category` | `PAYMENT` | sim | optional — PAYMENT | PIX_IN | PIX_OUT | WITHDRAWAL | REFUND | FEE | TRANSFER | BOLETO_IN | CARD_IN |
+| `dateFrom` | `2026-03-01T00:00:00Z` | sim | optional - Data início (ISO 8601) |
+| `dateTo` | `2026-03-16T23:00:00Z` | sim | optional - Data fim (ISO 8601) |
+| `limit` | `5` | sim | optional - 1-100, default 50 |
+| `nextPageToken` | `eyJTSyI6IjIwMjYtMDMtMTRUMjM6MjM6MzYuMDk2WiN0eG5fMTc3MzUzMDYxNjA5Nl8zOXdmbTk5aTQiLCJhY2NvdW50SWQiOiI0MjkxMzEyMTIifQ` | sim | optional - Token de paginação |
 
 **Respostas:**
 
@@ -1763,37 +1975,73 @@ GET {{base_url}}/v1/customers
 
 ```json
 {
-  "items": [
-    {
-      "customerId": "cus_xxx",
-      "name": "João da Silva",
-      "document": "12345678901",
-      "email": "joao@email.com"
-    }
-  ],
-  "pagination": {
-    "total": 5,
-    "hasMore": false
-  }
-}
+    "accountId": "429134563",
+    "transactions": [
+        {
+            "transactionId": "txn_1773694940975_r10b6fyzm",
+            "type": "CREDIT",
+            "category": "PIX_IN",
+            "amount": 2.56,
+            "balanceAfter": 901.6,
+            "title": "PIX recebido de Malga",
+            "paymentMethod": "PIX",
+            "chargeId": null,
+            "subscriptionId": null,
+            "endToEndId": "E13935893202603162102IfDcitXf0zO",
+            "counterparty": {
+                "name": "Malga",
+                "bank": "13935893",
+                "taxId": "37134852000458",
+                "account": "410900056"
+            },
+            "referenceId": "E139389320260316202IfDyytXf0zO",
+            "description": "PIX recebido direto",
+            "createdAt": "2026-03-16T21:02:20.975Z"
+        },
+        {
+            "transactionId": "txn_1773718528326_449bqmhm7",
+            "type": "DEBIT",
+            "category": "WITHDRAWAL",
+            "amount": 1,
+            "balanceAfter": 929.85,
+            "title": "Saque PIX",
+            "paymentMethod": "PIX",
+            "chargeId": null,
+            "subscriptionId": null,
+            "endToEndId": "E13935893202563270335KF9O0GDVVIz",
+            "counterparty": null,
+            "referenceId": "f7d1e875-7096-4fa8-992d-0c81a09f91c0",
+            "description": "Saque / transferência PIX",
+            "createdAt": "2026-03-17T03:35:28.326Z"
+        },
+    ],
+    "nextPageToken": "eyJTSyI6IjIwMjYtMDMtMTVU
+// ... (truncado)
 ```
 
 </details>
 
 
-### Buscar Cliente
+### Extrato conta master
 
 ```
-GET {{base_url}}/v1/customers/:id
+GET {{base_url}}/v1/wallet/transactions?type=CREDIT&category=PAYMENT&dateFrom=2026-03-01T00:00:00Z&dateTo=2026-03-16T23:00:00Z&limit=5&nextPageToken=eyJTSyI6IjIwMjYtMDMtMTRUMjM6MjM6MzYuMDk2WiN0eG5fMTc3MzUzMDYxNjA5Nl8zOXdmbTk5aTQiLCJhY2NvdW50SWQiOiI0MjkxMzEyMTIifQ
 ```
 
-**Escopo necessário:** `customers/read`
+**Escopo necessário:** `wallet/read`
 
-**Parâmetros de rota:**
+Com esta funcionalidade você pode isualizar movimentações na sua conta
 
-| Parâmetro | Descrição |
-|-----------|-----------|
-| `:id` | ID do cliente |
+**Query params:**
+
+| Parâmetro | Exemplo | Obrigatório | Descrição |
+|-----------|---------|-------------|-----------|
+| `type` | `CREDIT` | sim | optional — CREDIT | DEBIT |
+| `category` | `PAYMENT` | sim | optional — PAYMENT | PIX_IN | PIX_OUT | WITHDRAWAL | REFUND | FEE | TRANSFER | BOLETO_IN | CARD_IN |
+| `dateFrom` | `2026-03-01T00:00:00Z` | sim | optional - Data início (ISO 8601) |
+| `dateTo` | `2026-03-16T23:00:00Z` | sim | optional - Data fim (ISO 8601) |
+| `limit` | `5` | sim | optional - 1-100, default 50 |
+| `nextPageToken` | `eyJTSyI6IjIwMjYtMDMtMTRUMjM6MjM6MzYuMDk2WiN0eG5fMTc3MzUzMDYxNjA5Nl8zOXdmbTk5aTQiLCJhY2NvdW50SWQiOiI0MjkxMzEyMTIifQ` | sim | optional - Token de paginação |
 
 **Respostas:**
 
@@ -1802,62 +2050,133 @@ GET {{base_url}}/v1/customers/:id
 
 ```json
 {
-  "customerId": "cus_xxx",
-  "name": "João da Silva",
-  "addresses": [],
-  "subscriptions": [],
-  "ltv": 0
-}
+    "accountId": "429134563",
+    "transactions": [
+        {
+            "transactionId": "txn_1773694940975_r10b6fyzm",
+            "type": "CREDIT",
+            "category": "PIX_IN",
+            "amount": 2.56,
+            "balanceAfter": 901.6,
+            "title": "PIX recebido de Malga",
+            "paymentMethod": "PIX",
+            "chargeId": null,
+            "subscriptionId": null,
+            "endToEndId": "E13935893202603162102IfDcitXf0zO",
+            "counterparty": {
+                "name": "Malga",
+                "bank": "13935893",
+                "taxId": "37134852000458",
+                "account": "410900056"
+            },
+            "referenceId": "E139389320260316202IfDyytXf0zO",
+            "description": "PIX recebido direto",
+            "createdAt": "2026-03-16T21:02:20.975Z"
+        },
+        {
+            "transactionId": "txn_1773718528326_449bqmhm7",
+            "type": "DEBIT",
+            "category": "WITHDRAWAL",
+            "amount": 1,
+            "balanceAfter": 929.85,
+            "title": "Saque PIX",
+            "paymentMethod": "PIX",
+            "chargeId": null,
+            "subscriptionId": null,
+            "endToEndId": "E13935893202563270335KF9O0GDVVIz",
+            "counterparty": null,
+            "referenceId": "f7d1e875-7096-4fa8-992d-0c81a09f91c0",
+            "description": "Saque / transferência PIX",
+            "createdAt": "2026-03-17T03:35:28.326Z"
+        },
+    ],
+    "nextPageToken": "eyJTSyI6IjIwMjYtMDMtMTVU
+// ... (truncado)
 ```
 
 </details>
 
-<details>
-<summary><code>404</code> — Não encontrado</summary>
 
-```json
-{
-  "code": "CUSTOMER_NOT_FOUND"
-}
-```
+---
 
-</details>
+## Devoluções (Estorno PIX)
 
+Estorno total ou parcial de cobranças PIX já pagas. O `reason` categoriza o motivo para fins de compliance. O valor do estorno não pode exceder o valor disponível para devolução.
 
-### Atualizar Cliente
+### Devolução
 
 ```
-PUT {{base_url}}/v1/customers/:id
+POST {{base_url}}/v1/wallet/refunds
 ```
 
-**Escopo necessário:** `customers/write`
+**Escopo necessário:** `wallet/write`
 
-**Parâmetros de rota:**
+Com esta funcionalidade você pode criar u_ma devolução._
 
-| Parâmetro | Descrição |
-|-----------|-----------|
-| `:id` | ID do cliente |
+> ⚠️ **Atenção:** O código de motivo da devolução é obrigatório. Os códigos possiveis são:  
+BANK_ERROR -> Erro bancário  
+FRAUD -> Suspeita de fraude  
+CUSTOMER_REQUEST -> Solicitalão do cliente  
+PIX_CHANGE_ERROR -> Erro na transação
 
 **Body (JSON):**
 
 ```json
 {
-  "name": "João Silva Atualizado",
-  "email": "novo@email.com",
-  "phone": "+5511988887777"
+  "accountId": "459013777",
+  "endToEndId": "E003603052026032511186a4f4cdf139",
+  "amount": 1.0,
+  "reason": "CUSTOMER_REQUEST",
+  "chargeId": "chg_abc123"
 }
 ```
 
 **Respostas:**
 
 <details>
-<summary><code>200</code> — Atualizado</summary>
+<summary><code>201</code> — Sucesso</summary>
 
 ```json
 {
-  "customer": {
-    "customerId": "cus_xxx",
-    "name": "João Silva Atualizado"
+  "refundId": "ref_1774437918293_jm2hen5y7",
+  "status": "PROCESSING",
+  "amount": 1,
+  "reason": "CUSTOMER_REQUEST",
+  "endToEndId": "E003603052026032511186a4f4cdf139",
+  "returnIdentification": "D13935893202603251125zbRSLI3lqPH",
+  "chargeId": "cha_1774437468463_4hj927ips",
+  "createdAt": "2026-03-25T11:25:18.293Z"
+}
+```
+
+</details>
+
+<details>
+<summary><code>401</code> — Não autorizado</summary>
+
+```json
+{
+  "error": {
+    "message": "Subconta nao pertence a esta conta",
+    "code": "OWNERSHIP_MISMATCH",
+    "details": null,
+    "timestamp": "2026-03-25T11:28:25.397Z"
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><code>400</code> — 400 — Valor excede o original</summary>
+
+```json
+{
+  "error": {
+    "message": "Valor do estorno excede o valor disponível para devolução",
+    "code": "REFUND_AMOUNT_EXCEEDED",
+    "details": null,
+    "timestamp": "2026-06-10T10:00:00.000Z"
   }
 }
 ```
@@ -1865,59 +2184,666 @@ PUT {{base_url}}/v1/customers/:id
 </details>
 
 
-### Remover Cliente
+---
+
+## Cobrança Avulsa
+
+Cobranças unitárias enviadas diretamente ao cliente por e-mail ou link, sem necessidade de checkout. Suporta PIX, boleto e cartão. Para boleto, o campo `dueDate` é obrigatório. Para PIX, `expiration` define o tempo de validade em segundos.
+
+### Cobrança avulsa
 
 ```
-DELETE {{base_url}}/v1/customers/:id
+POST {{base_url}}/v1/charges/single
 ```
 
-**Escopo necessário:** `customers/write`
+**Escopo necessário:** `checkouts/write`
 
-Não é possível remover clientes com cobranças ou assinaturas ativas.
+Cria uma cobrança avulsa sem necessidade de cadastrar produtos ou informar `priceId` — basta enviar o `amount`. Disponível para **Pix**, **cartão de crédito** e **boleto**.
+
+**Campos obrigatórios:** `paymentMethod`, `amount`, `title`
+
+Para `pix` e `boleto`, `dueDate` (YYYY-MM-DD) é recomendado; se omitido o sistema usa 30 dias.
+
+Para `creditcard`, envie os dados do cartão no objeto `card`.
+
+**Case de uso:**
+
+_Como SaaS, preciso cobrar um cliente pontualmente sem criar um produto no catálogo — basta informar o valor e o método de pagamento._
+
+**Body (JSON):**
+
+```json
+{
+  "paymentMethod": "pix",
+  "amount": 150.0,
+  "title": "Consultoria mensal",
+  "description": "Referente a julho/2026",
+  "dueDate": "2026-07-31",
+  "expiration": 3600,
+  "customer": {
+    "name": "Maria Souza",
+    "email": "maria@example.com",
+    "documentNumber": "98765432100",
+    "phone": "48991234567"
+  },
+  "metadata": {
+    "referencia": "contrato-123"
+  },
+  "boletoInstructions": {
+    "fine": 2,
+    "interest": 1,
+    "discount": {
+      "amount": 5,
+      "modality": "fixed",
+      "limitDate": "2026-07-30"
+    }
+  }
+}
+```
+
+> **Enums:** paymentMethod: pix | boleto | creditcard    boletoInstructions.discount.modality: fixed | percent
+
+**Respostas:**
+
+<details>
+<summary><code>200</code> — 200 — Pix</summary>
+
+```json
+{
+  "chargeId": "cha_1780000000000_abcdef123",
+  "emv": "00020101021226910014br.gov.bcb.pix2569qrcode.pix.celcoin.com.br/pixqrcode/v2/example5204000053039865802BR5909ValidaPix6013Florianopolis62070503***6304ABCD",
+  "qrCode": "data:image/png;base64,iVBOR..."
+}
+```
+
+</details>
+
+<details>
+<summary><code>200</code> — 200 — Boleto</summary>
+
+```json
+{
+  "chargeId": "cha_1780000000001_xyz789",
+  "digitableLine": "03399.00000 00000.000000 00000.000000 1 00000000025000",
+  "barCode": "03391000000000000000000000000000100000002500000",
+  "dueDate": "2026-07-31",
+  "pdfUrl": "/v1/charges/cha_1780000000001_xyz789/boleto.pdf"
+}
+```
+
+</details>
+
+<details>
+<summary><code>200</code> — 200 — Cartão de crédito</summary>
+
+```json
+{
+  "chargeId": "cha_1780000000002_cc456",
+  "status": "PAID",
+  "amount": 199.9,
+  "paymentType": "CREDIT_CARD",
+  "installments": 3
+}
+```
+
+</details>
+
+
+### Status de cobrança
+
+```
+GET {{base_url}}/v1/charges/:chargeId
+```
+
+**Escopo necessário:** `pix.cob/read`
 
 **Parâmetros de rota:**
 
 | Parâmetro | Descrição |
 |-----------|-----------|
-| `:id` | ID do cliente |
+| `:chargeId` | ID do recurso |
 
 **Respostas:**
 
 <details>
-<summary><code>200</code> — Removido</summary>
+<summary><code>200</code> — 200</summary>
 
 ```json
 {
-  "message": "Cliente deletado com sucesso"
+    "chargeId": "cha_1771453171013_fp6iocaxb",
+    "status": "PAID",
+    "amount": 0.2,
+    "paymentType": "PIX",
+    "emv": "00020101021226910014br.gov.bcb.pix2569qrcode.pix.celcoin.com.br/pixqrcode/v2/bfc2182e025f97f17f843ae1fe8a895204000053039865802BR5909ValidaPix6013Florianopolis62070503***63049C4E",
+    "paidAt": "2026-02-18T22:22:50.031Z",
+    "createdAt": "2026-02-18T22:19:31.013Z",
 }
 ```
 
 </details>
 
 <details>
-<summary><code>400</code> — Possui assinaturas</summary>
+<summary><code>200</code> — 200 — PENDING</summary>
 
 ```json
 {
-  "code": "CUSTOMER_HAS_SUBSCRIPTIONS"
+  "chargeId": "cha_1771453171013_fp6iocaxb",
+  "status": "PENDING",
+  "amount": 10.0,
+  "paymentType": "PIX",
+  "emv": "00020101021226910014br.gov.bcb.pix...",
+  "createdAt": "2026-06-10T10:00:00.000Z"
 }
 ```
 
 </details>
+
+<details>
+<summary><code>200</code> — 200 — ARCHIVED</summary>
+
+```json
+{
+  "chargeId": "cha_1771453171013_fp6iocaxb",
+  "status": "ARCHIVED",
+  "amount": 10.0,
+  "archivedAt": "2026-06-10T10:05:00.000Z",
+  "createdAt": "2026-06-10T10:00:00.000Z"
+}
+```
+
+</details>
+
+<details>
+<summary><code>404</code> — 404 — Cobrança não encontrada</summary>
+
+```json
+{
+  "error": {
+    "message": "Cobrança cha_xxx não encontrada",
+    "code": "CHARGE_NOT_FOUND",
+    "details": null,
+    "timestamp": "2026-06-10T10:00:00.000Z"
+  }
+}
+```
+
+</details>
+
+
+### Cancelar cobrança
+
+```
+DELETE {{base_url}}/v1/charges/:chargeId
+```
+
+**Escopo necessário:** `pix.cob/write`
+
+**Parâmetros de rota:**
+
+| Parâmetro | Descrição |
+|-----------|-----------|
+| `:chargeId` | ID do recurso |
+
+**Respostas:**
+
+<details>
+<summary><code>200</code> — 200</summary>
+
+```json
+{
+  "message": "Cobrança cancelada com sucesso",
+  "chargeId": "cha_1779239661689_g1ugeix0e"
+}
+```
+
+</details>
+
+<details>
+<summary><code>400</code> — 400 — Cobrança já paga</summary>
+
+```json
+{
+  "error": {
+    "message": "Não é possível cancelar uma cobrança com status PAID",
+    "code": "CHARGE_ALREADY_PAID",
+    "details": null,
+    "timestamp": "2026-06-10T10:00:00.000Z"
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><code>404</code> — 404 — Não encontrada</summary>
+
+```json
+{
+  "error": {
+    "message": "Cobrança cha_xxx não encontrada",
+    "code": "CHARGE_NOT_FOUND",
+    "details": null,
+    "timestamp": "2026-06-10T10:00:00.000Z"
+  }
+}
+```
+
+</details>
+
+
+---
+
+## Assinaturas (Recorrência)
+
+Modelo de cobrança recorrente atrelado a um Produto/Preço. Ciclos automáticos de cobrança conforme o `recurrenceType` do preço. Suporta upgrade (troca de plano com cobrança pro-rata imediata) e downgrade (agendado para o próximo ciclo).
+
+**Ciclo de status:** `TRIALING` → `ACTIVE` → `PAST_DUE` → (`CANCELED` | `PAUSED`)
+
+### Listar assinaturas
+
+```
+GET {{base_url}}/v1/subscriptions
+```
+
+**Query params:**
+
+| Parâmetro | Exemplo | Obrigatório | Descrição |
+|-----------|---------|-------------|-----------|
+| `limit` | `20` | não | Quantidade de itens por página (padrão: 50) |
+| `lastKey` | `` | não | Cursor da próxima página retornado na resposta anterior (base64) |
+| `status` | `ACTIVE` | não | Filtro por status: ACTIVE | PENDING | CANCELED | PAST_DUE | PAUSED |
+| `search` | `` | não | Busca por nome ou e-mail do cliente (case-insensitive) |
+| `document` | `` | não | Filtro por CPF ou CNPJ do cliente (exact match) |
+| `paymentMethod` | `` | não | Filtro por método de pagamento: CREDIT_CARD | PIX | BOLETO |
+| `paymentType` | `` | não | Filtro por tipo de pagamento |
+| `startDate` | `` | não | Data de início do período (ISO 8601, ex: 2026-01-01T00:00:00.000Z) |
+| `endDate` | `` | não | Data de fim do período (ISO 8601, ex: 2026-12-31T23:59:59.999Z) |
+
+**Respostas:**
+
+<details>
+<summary><code>200</code> — 200 — Lista de assinaturas</summary>
+
+```json
+{
+  "data": [
+    {
+      "subscriptionId": "sub_1772275462312_abcdef",
+      "status": "ACTIVE",
+      "paymentMethod": "CREDIT_CARD",
+      "amount": 99.9,
+      "customerId": "cus_1772230075378_21n6ykyb9",
+      "productId": "prod_1772275462312_lsopu8ntr",
+      "currentPeriodStart": "2026-06-01T00:00:00.000Z",
+      "currentPeriodEnd": "2026-07-01T00:00:00.000Z",
+      "createdAt": "2026-01-15T10:00:00.000Z"
+    }
+  ],
+  "hasMore": false,
+  "lastKey": null
+}
+```
+
+</details>
+
+
+### Buscar assinatura por ID
+
+```
+GET {{base_url}}/v1/subscriptions/:subscriptionId
+```
+
+**Parâmetros de rota:**
+
+| Parâmetro | Descrição |
+|-----------|-----------|
+| `:subscriptionId` | ID da assinatura (ex: sub_xxxx) |
+
+**Respostas:**
+
+<details>
+<summary><code>200</code> — 200 — Assinatura encontrada</summary>
+
+```json
+{
+  "subscriptionId": "sub_1772275462312_abcdef",
+  "status": "ACTIVE",
+  "paymentMethod": "CREDIT_CARD",
+  "amount": 99.9,
+  "interval": "MONTHLY",
+  "customerId": "cus_1772230075378_21n6ykyb9",
+  "customer": {
+    "name": "Isaac Newton",
+    "email": "isaac@example.com",
+    "documentNumber": "12345678920"
+  },
+  "items": [
+    {
+      "itemId": "item_xxxx",
+      "priceId": "price_xxxx",
+      "quantity": 1,
+      "amount": 99.9,
+      "status": "ACTIVE"
+    }
+  ],
+  "currentPeriodStart": "2026-06-01T00:00:00.000Z",
+  "currentPeriodEnd": "2026-07-01T00:00:00.000Z",
+  "createdAt": "2026-01-15T10:00:00.000Z"
+}
+```
+
+</details>
+
+<details>
+<summary><code>404</code> — 404 — Assinatura não encontrada</summary>
+
+```json
+{
+  "error": {
+    "message": "Assinatura sub_xxxx não encontrada",
+    "code": "SUBSCRIPTION_NOT_FOUND",
+    "details": null,
+    "timestamp": "2026-06-10T10:00:00.000Z"
+  }
+}
+```
+
+</details>
+
+
+### Calcular Pro Rata
+
+```
+POST {{base_url}}/v1/subscriptions/prorata
+```
+
+**Body (JSON):**
+
+```json
+{
+  "subscriptionId": "sub_xxxx",
+  "old": {
+    "priceId": "price_xxxx"
+  },
+  "new": {
+    "priceId": "price_yyyy",
+    "quantity": 1
+  }
+}
+```
+
+**Respostas:**
+
+<details>
+<summary><code>200</code> — 200 — Pro rata calculado</summary>
+
+```json
+{
+  "prorataAmount": 45.16,
+  "daysRemaining": 15,
+  "totalDays": 31,
+  "currentAmount": 99.9,
+  "newAmount": 149.9
+}
+```
+
+</details>
+
+
+### Upgrade de plano
+
+```
+POST {{base_url}}/v1/subscriptions/update
+```
+
+**Body (JSON):**
+
+```json
+{
+  "subscriptionId": "sub_xxxx",
+  "old": {
+    "itemId": "item_xxxx"
+  },
+  "new": {
+    "priceId": "price_yyyy",
+    "quantity": 1
+  }
+}
+```
+
+**Respostas:**
+
+<details>
+<summary><code>200</code> — 200 — Upgrade realizado</summary>
+
+```json
+{
+  "success": true,
+  "subscriptionId": "sub_xxxx",
+  "item": {
+    "itemId": "item_yyyy",
+    "priceId": "price_yyyy",
+    "amount": 149.9,
+    "status": "ACTIVE"
+  },
+  "proRataCharge": {
+    "chargeId": "cha_xxx",
+    "amount": 45.16,
+    "status": "PAID"
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><code>400</code> — 400 — Assinatura não elegível</summary>
+
+```json
+{
+  "error": {
+    "message": "A assinatura não está em um status elegível para upgrade (ACTIVE ou PAST_DUE)",
+    "code": "SUBSCRIPTION_NOT_ELIGIBLE",
+    "details": null,
+    "timestamp": "2026-06-10T10:00:00.000Z"
+  }
+}
+```
+
+</details>
+
+
+### Downgrade de plano
+
+```
+POST {{base_url}}/v1/subscriptions/update
+```
+
+**Body (JSON):**
+
+```json
+{
+  "subscriptionId": "sub_xxxx",
+  "old": {
+    "itemId": "item_xxxx"
+  },
+  "new": {
+    "priceId": "price_xxxx",
+    "quantity": 1
+  }
+}
+```
+
+**Respostas:**
+
+<details>
+<summary><code>200</code> — 200 — Downgrade agendado</summary>
+
+```json
+{
+  "success": true,
+  "subscriptionId": "sub_xxxx",
+  "scheduledChange": {
+    "effectiveDate": "2026-07-01T00:00:00.000Z",
+    "newPriceId": "price_xxxx",
+    "newAmount": 49.9
+  }
+}
+```
+
+</details>
+
+
+### Cancelar assinatura
+
+```
+POST {{base_url}}/v1/subscriptions/update
+```
+
+**Body (JSON):**
+
+```json
+{
+  "subscriptionId": "sub_xxxx",
+  "action": "cancel"
+}
+```
+
+**Respostas:**
+
+<details>
+<summary><code>200</code> — 200 — Assinatura cancelada</summary>
+
+```json
+{
+  "success": true,
+  "subscriptionId": "sub_xxxx",
+  "status": "CANCELED",
+  "canceledAt": "2026-06-10T10:00:00.000Z"
+}
+```
+
+</details>
+
+<details>
+<summary><code>404</code> — 404 — Assinatura não encontrada</summary>
+
+```json
+{
+  "error": {
+    "message": "Assinatura sub_xxxx não encontrada",
+    "code": "SUBSCRIPTION_NOT_FOUND",
+    "details": null,
+    "timestamp": "2026-06-10T10:00:00.000Z"
+  }
+}
+```
+
+</details>
+
+
+### Adicionar item à assinatura
+
+```
+POST {{base_url}}/v1/subscriptions/:subscriptionId/items
+```
+
+**Parâmetros de rota:**
+
+| Parâmetro | Descrição |
+|-----------|-----------|
+| `:subscriptionId` | ID da assinatura |
+
+**Body (JSON):**
+
+```json
+{
+  "priceId": "price_xxxx",
+  "quantity": 1
+}
+```
+
+**Respostas:**
+
+<details>
+<summary><code>200</code> — 200 — Item adicionado (cartão)</summary>
+
+```json
+{
+  "success": true,
+  "item": {
+    "itemId": "item_xxxx",
+    "priceId": "price_xxxx",
+    "amount": 99.9,
+    "status": "ACTIVE",
+    "quantity": 1
+  },
+  "proRataCharge": {
+    "chargeId": "cha_xxx",
+    "amount": 29.97,
+    "status": "PAID"
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><code>200</code> — 200 — Item adicionado (PIX/Boleto)</summary>
+
+```json
+{
+  "success": true,
+  "item": {
+    "itemId": "item_xxxx",
+    "priceId": "price_xxxx",
+    "amount": 99.9,
+    "status": "PENDING_UPGRADE",
+    "quantity": 1
+  },
+  "proRataCharge": {
+    "chargeId": "cha_xxx",
+    "emv": "00020101...",
+    "amount": 29.97,
+    "status": "PENDING"
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><code>404</code> — 404 — Assinatura não encontrada</summary>
+
+```json
+{
+  "error": {
+    "message": "Assinatura sub_xxxx não encontrada",
+    "code": "SUBSCRIPTION_NOT_FOUND",
+    "details": null,
+    "timestamp": "2026-06-10T10:00:00.000Z"
+  }
+}
+```
+
+</details>
+
 
 ---
 
 ## Cupons de Desconto
 
-Cupons de desconto aplicáveis em checkouts e assinaturas. Aceitam desconto percentual (`PERCENTAGE`) ou valor fixo (`FIXED`). É possível configurar quantidade máxima de usos, número máximo de ciclos em que o desconto se aplica, valor mínimo de compra e período de validade.
+Cupons de desconto aplicáveis em checkouts e assinaturas. Suportam desconto percentual (`PERCENTAGE`) ou valor fixo (`FIXED`). Podem ter limite de usos, limite de ciclos em assinaturas, valor mínimo de pedido, e validade por data.
 
-### Criar Cupom
+### Criar cupom
 
 ```
 POST {{base_url}}/v1/coupons
 ```
 
 **Escopo necessário:** `coupons/write`
+
+Cria um novo cupom de desconto. O cupom pode ser de valor fixo (`FIXED`) ou percentual (`PERCENTAGE`) e pode ser configurado com limite de resgates, validade e restrição por tipo de cobrança.
 
 **Body (JSON):**
 
@@ -1940,7 +2866,7 @@ POST {{base_url}}/v1/coupons
 **Respostas:**
 
 <details>
-<summary><code>201</code> — Cupom criado</summary>
+<summary><code>201</code> — 201 — Cupom criado</summary>
 
 ```json
 {
@@ -1964,27 +2890,29 @@ POST {{base_url}}/v1/coupons
 </details>
 
 
-### Listar Cupons
+### Listar cupons
 
 ```
-GET {{base_url}}/v1/coupons
+GET {{base_url}}/v1/coupons?limit=20&status=ACTIVE
 ```
 
 **Escopo necessário:** `coupons/read`
 
+Lista todos os cupons criados na conta, com suporte a filtros e paginação cursor-based.
+
 **Query params:**
 
-| Parâmetro | Obrigatório | Descrição |
-|-----------|-------------|-----------|
-| `limit` | não | Itens por página (padrão: 15) |
-| `lastKey` | não | Código de posição retornado pela última consulta, para carregar a próxima página |
-| `status` | não | `ACTIVE`, `PAUSED` ou `INACTIVE` |
-| `search` | não | Busca por código ou nome |
+| Parâmetro | Exemplo | Obrigatório | Descrição |
+|-----------|---------|-------------|-----------|
+| `limit` | `20` | sim | optional - itens por página (padrão: 50) |
+| `status` | `ACTIVE` | sim | optional - ACTIVE, PAUSED ou INACTIVE |
+| `lastKey` | `` | não | optional - cursor da próxima página (base64) |
+| `search` | `` | não | optional - busca por código ou nome |
 
 **Respostas:**
 
 <details>
-<summary><code>200</code> — Sucesso</summary>
+<summary><code>200</code> — 200 — Lista de cupons</summary>
 
 ```json
 {
@@ -2007,7 +2935,7 @@ GET {{base_url}}/v1/coupons
 </details>
 
 
-### Buscar Cupom
+### Buscar cupom por ID
 
 ```
 GET {{base_url}}/v1/coupons/:couponId
@@ -2015,16 +2943,18 @@ GET {{base_url}}/v1/coupons/:couponId
 
 **Escopo necessário:** `coupons/read`
 
+Retorna os detalhes de um cupom específico, incluindo estatísticas de uso.
+
 **Parâmetros de rota:**
 
 | Parâmetro | Descrição |
 |-----------|-----------|
-| `:couponId` | ID do cupom |
+| `:couponId` | ID do recurso |
 
 **Respostas:**
 
 <details>
-<summary><code>200</code> — Cupom encontrado</summary>
+<summary><code>200</code> — 200 — Cupom encontrado</summary>
 
 ```json
 {
@@ -2041,7 +2971,7 @@ GET {{base_url}}/v1/coupons/:couponId
 </details>
 
 <details>
-<summary><code>404</code> — Cupom não encontrado</summary>
+<summary><code>404</code> — 404 — Cupom não encontrado</summary>
 
 ```json
 {
@@ -2057,7 +2987,7 @@ GET {{base_url}}/v1/coupons/:couponId
 </details>
 
 
-### Atualizar Cupom
+### Atualizar cupom
 
 ```
 PUT {{base_url}}/v1/coupons/:couponId
@@ -2065,11 +2995,13 @@ PUT {{base_url}}/v1/coupons/:couponId
 
 **Escopo necessário:** `coupons/write`
 
+Atualiza os dados de um cupom existente. Todos os campos são opcionais.
+
 **Parâmetros de rota:**
 
 | Parâmetro | Descrição |
 |-----------|-----------|
-| `:couponId` | ID do cupom |
+| `:couponId` | ID do recurso |
 
 **Body (JSON):**
 
@@ -2084,7 +3016,7 @@ PUT {{base_url}}/v1/coupons/:couponId
 **Respostas:**
 
 <details>
-<summary><code>200</code> — Atualizado</summary>
+<summary><code>200</code> — 200 — Cupom atualizado</summary>
 
 ```json
 {
@@ -2098,22 +3030,38 @@ PUT {{base_url}}/v1/coupons/:couponId
 
 </details>
 
+<details>
+<summary><code>404</code> — 404 — Cupom não encontrado</summary>
 
-### Atualizar Cupom Parcialmente
+```json
+{
+  "error": {
+    "message": "Cupom cpn_xxx não encontrado",
+    "code": "COUPON_NOT_FOUND",
+    "details": null,
+    "timestamp": "2026-06-10T10:00:00.000Z"
+  }
+}
+```
+
+</details>
+
+
+### Atualizar status do cupom
 
 ```
-PATCH {{base_url}}/v1/coupons/:couponId
+PATCH {{base_url}}/v1/coupons/:couponId/status
 ```
 
 **Escopo necessário:** `coupons/write`
 
-Atualiza apenas o status do cupom. Use `PAUSED` para suspender temporariamente, `INACTIVE` para desativar definitivamente.
+Atualiza apenas o status de um cupom. Use `PAUSED` para suspender temporariamente sem excluir, e `INACTIVE` para desativar definitivamente.
 
 **Parâmetros de rota:**
 
 | Parâmetro | Descrição |
 |-----------|-----------|
-| `:couponId` | ID do cupom |
+| `:couponId` | ID do recurso |
 
 **Body (JSON):**
 
@@ -2126,7 +3074,7 @@ Atualiza apenas o status do cupom. Use `PAUSED` para suspender temporariamente, 
 **Respostas:**
 
 <details>
-<summary><code>200</code> — Status atualizado</summary>
+<summary><code>200</code> — 200 — Status atualizado</summary>
 
 ```json
 {
@@ -2140,7 +3088,7 @@ Atualiza apenas o status do cupom. Use `PAUSED` para suspender temporariamente, 
 </details>
 
 <details>
-<summary><code>400</code> — Status inválido</summary>
+<summary><code>400</code> — 400 — Status inválido</summary>
 
 ```json
 {
@@ -2156,7 +3104,7 @@ Atualiza apenas o status do cupom. Use `PAUSED` para suspender temporariamente, 
 </details>
 
 
-### Remover Cupom
+### Deletar cupom
 
 ```
 DELETE {{base_url}}/v1/coupons/:couponId
@@ -2164,18 +3112,18 @@ DELETE {{base_url}}/v1/coupons/:couponId
 
 **Escopo necessário:** `coupons/write`
 
-Cupons já utilizados em assinaturas não podem ser removidos.
+Deleta permanentemente um cupom. Cupons já utilizados em assinaturas não podem ser deletados.
 
 **Parâmetros de rota:**
 
 | Parâmetro | Descrição |
 |-----------|-----------|
-| `:couponId` | ID do cupom |
+| `:couponId` | ID do recurso |
 
 **Respostas:**
 
 <details>
-<summary><code>200</code> — Removido</summary>
+<summary><code>200</code> — 200 — Cupom deletado</summary>
 
 ```json
 {
@@ -2186,20 +3134,32 @@ Cupons já utilizados em assinaturas não podem ser removidos.
 
 </details>
 
+<details>
+<summary><code>404</code> — 404 — Cupom não encontrado</summary>
 
-### Validar Cupom
+```json
+{
+  "error": {
+    "message": "Cupom cpn_xxx não encontrado",
+    "code": "COUPON_NOT_FOUND",
+    "details": null,
+    "timestamp": "2026-06-10T10:00:00.000Z"
+  }
+}
+```
+
+</details>
+
+
+### Validar cupom
 
 ```
-POST {{base_url}}/v1/coupons/:couponId/validate
+POST {{base_url}}/v1/coupons/validate
 ```
 
-Verifica se um cupom pode ser usado e retorna o valor do desconto calculado. Esta rota pode ser chamada sem token de acesso, ideal para exibir o desconto ao cliente antes de confirmar o pagamento.
+Valida um cupom sem autenticação — ideal para verificar se o cupom é válido antes de exibir o desconto no checkout. Retorna `valid: true` e os detalhes do cupom se válido, ou `valid: false` com o motivo da rejeição.
 
-**Parâmetros de rota:**
-
-| Parâmetro | Descrição |
-|-----------|-----------|
-| `:couponId` | ID do cupom |
+> ⚠️ **Atenção:** Este endpoint é público e não requer autenticação.
 
 **Body (JSON):**
 
@@ -2207,7 +3167,9 @@ Verifica se um cupom pode ser usado e retorna o valor do desconto calculado. Est
 {
   "code": "PROMO10",
   "amount": 100.0,
-  "productIds": ["prod_xxxx"],
+  "productIds": [
+    "prod_xxxx"
+  ],
   "chargeType": "RECURRING",
   "customerDocument": "12345678920"
 }
@@ -2216,7 +3178,7 @@ Verifica se um cupom pode ser usado e retorna o valor do desconto calculado. Est
 **Respostas:**
 
 <details>
-<summary><code>200</code> — Cupom válido</summary>
+<summary><code>200</code> — 200 — Cupom válido</summary>
 
 ```json
 {
@@ -2233,7 +3195,7 @@ Verifica se um cupom pode ser usado e retorna o valor do desconto calculado. Est
 </details>
 
 <details>
-<summary><code>400</code> — Cupom inválido ou expirado</summary>
+<summary><code>400</code> — 400 — Cupom inválido ou expirado</summary>
 
 ```json
 {
@@ -2248,1649 +3210,8 @@ Verifica se um cupom pode ser usado e retorna o valor do desconto calculado. Est
 
 </details>
 
----
-
-## Cobranças
-
-Cobranças avulsas via PIX, boleto ou cartão de crédito. Suportam divisão automática do valor entre subcontas (split) e agendamento de débito automático via PIX.
-
-**Ciclo de status:** `PENDING` → `PAID` → (`CANCELED` | `ARCHIVED` | `REFUNDED` | `PARTIALLY_REFUNDED`)
-
-### Criar Cobrança PIX
-
-```
-POST {{base_url}}/v1/charges
-```
-
-**Escopo necessário:** `pix.cob/write`
-
-**Campos obrigatórios:** `paymentMethod`, `amount`, `title`.
-
-**Formatos de data:** `expiration` e `dueDate` usam o formato `YYYY-MM-DD` — ex: `"2026-12-31"`.
-
-**Body (JSON):**
-
-```json
-{
-  "paymentMethod": "pix",
-  "amount": 100.0,
-  "title": "Cobrança PIX",
-  "description": "Referente ao pedido #001",
-  "dueDate": "2026-07-01",
-  "expiration": "2026-07-31",
-  "customer": {
-    "documentNumber": "12345678901",
-    "name": "João da Silva",
-    "email": "joao@email.com",
-    "phone": "+5511999998888"
-  },
-  "split": [
-    {
-      "type": "percentage",
-      "accountNumber": "123456",
-      "amount": 10
-    }
-  ],
-  "metadata": {
-    "orderId": "ORD-001"
-  }
-}
-```
-
-> **Split types:** `fixed` (valor fixo em R$) | `percentage` (percentual do valor bruto)
-
-> **Campos de data no Pix:**
-> - `dueDate` — data de vencimento. O cliente paga sem juros/multa até essa data. Formato: `YYYY-MM-DD`. Se omitido: hoje + 30 dias.
-> - `expiration` — prazo máximo para pagamento após o vencimento (com juros/multa se configurados). Formato: `YYYY-MM-DD`. **Deve ser posterior a `dueDate`.** Se omitido: `dueDate` + 30 dias.
-> - Se apenas `expiration` for informado (sem `dueDate`): o Pix expira nessa data sem vencimento definido.
-> - Nenhum dos dois é obrigatório — sem eles o QR Code não tem prazo de expiração.
-
-**Respostas:**
-
-<details>
-<summary><code>200</code> — PIX gerado</summary>
-
-```json
-{
-  "chargeId": "cha_xxx",
-  "emv": "00020126580014...",
-  "qrCode": "data:image/png;base64,iVBORw0KGgo...",
-  "metadata": {}
-}
-```
-
-> **`emv`** — código Pix Copia e Cola (padrão EMV/BR Code). Exiba em um botão de copiar para o cliente colar no app do banco.
-> **`qrCode`** — imagem do QR Code em base64 (data URI). Use diretamente em `<img src={qrCode} />`.
-
-</details>
-
-<details>
-<summary><code>400</code> — Split excede valor líquido</summary>
-
-```json
-{
-  "code": "SPLIT_EXCEEDS_NET_AMOUNT"
-}
-```
-
-</details>
-
-
-### Criar Cobrança Boleto
-
-```
-POST {{base_url}}/v1/charges
-```
-
-**Escopo necessário:** `checkouts/write`
-
-**Campos obrigatórios:** `paymentMethod`, `amount`, `title`, `customer.address` (obrigatório para boleto — sem endereço a emissão falha).
-
-**Formatos de data:** `dueDate` e `boletoInstructions.discount.limitDate` usam o formato `YYYY-MM-DD` — ex: `"2026-07-30"`.
-
-**Body (JSON):**
-
-```json
-{
-  "paymentMethod": "boleto",
-  "amount": 250.0,
-  "title": "Fatura de Serviços",
-  "description": "Referente ao mês de julho",
-  "dueDate": "2026-07-30",
-  "expirationAfterDueDate": 30,
-  "customer": {
-    "name": "João da Silva",
-    "documentNumber": "12345678901",
-    "email": "joao@email.com",
-    "phone": "+5511999998888",
-    "address": {
-      "street": "Av. Paulista",
-      "number": "1000",
-      "complement": "Apto 52",
-      "neighborhood": "Bela Vista",
-      "city": "São Paulo",
-      "state": "SP",
-      "zipCode": "01310100",
-      "country": "BR"
-    }
-  },
-  "boletoInstructions": {
-    "fine": 2,
-    "interest": 1,
-    "discount": {
-      "amount": 5,
-      "modality": "fixed",
-      "limitDate": "2026-07-29"
-    }
-  },
-  "metadata": {
-    "orderId": "ORD-002"
-  }
-}
-```
-
-> Se `dueDate` for omitido, o vencimento será em 30 dias. O campo `boletoInstructions.discount.modality` aceita: `fixed` (valor fixo) ou `percent` (percentual). O campo `limitDate` deve ser anterior ao `dueDate`.
-
-**Respostas:**
-
-<details>
-<summary><code>200</code> — Boleto gerado</summary>
-
-```json
-{
-  "chargeId": "cha_xxx",
-  "digitableLine": "03399.09097 74000.759406 18000.011230 3 97560000025000",
-  "barCode": "03393975600000250009090974000759401800001123",
-  "dueDate": "2026-07-30",
-  "pdfUrl": "/v1/charges/cha_xxx/boleto.pdf"
-}
-```
-
-</details>
-
-
-### Criar Cobrança Cartão
-
-O pagamento com cartão suporta **3 fluxos distintos**. Escolha o que melhor se encaixa na sua integração:
-
-| Fluxo | Descrição | Quando usar |
-|-------|-----------|-------------|
-| **1. Cobrança imediata** | Cria e cobra em uma única chamada | Pagamento one-shot |
-| **2. Criar → Capturar** | Cria a cobrança primeiro, cobra depois | Reservar valor antes de processar |
-| **3. Checkout transparente** | Paga um checkout pré-criado | Integração com sistema de checkouts/assinaturas |
-
-> 💡 Para cobrar um cartão você pode enviar um `paymentMethodId` (`pm_xxx`) — gerado via [`POST /v1/payment-methods/tokenize`](#sdk-de-tokenização) ou pelo SDK `@validapay/tokenize` — **ou** os dados brutos do cartão no campo `card`. Ao enviar `card`, o cartão é tokenizado e salvo automaticamente, ficando reutilizável como `paymentMethodId` nas próximas cobranças. O token de tokenização exige escopo `payment.methods/write` e é **separado** do token de cobranças.
-
-> ⚠️ **`customer` é obrigatório quando o cartão é enviado para pagamento** (seja via `card` ou `paymentMethodId`), pois o cartão é vinculado a um cliente. Informe ao menos `customer.documentNumber`. Sem cartão (apenas criação — ver Fluxo 2), o `customer` é opcional.
 
 ---
-
-#### Fluxo 1 — Cobrança imediata
-
-Cria e cobra em uma única chamada. O pagamento é processado imediatamente e o retorno já indica aprovação ou recusa. Envie o cartão de uma das duas formas:
-
-```
-POST {{base_url}}/v1/charges
-```
-
-**Escopo necessário:** `checkouts/write`
-
-**Opção A — cartão tokenizado (`paymentMethodId`, recomendado):**
-
-```json
-{
-  "paymentMethod": "creditcard",
-  "amount": 399.9,
-  "title": "Compra avulsa",
-  "description": "Produto Premium",
-  "customer": {
-    "name": "João da Silva",
-    "documentNumber": "12345678901",
-    "email": "joao@email.com"
-  },
-  "paymentMethodId": "pm_abc123",
-  "installments": 3,
-  "passFeesToCustomer": false,
-  "freeInstallments": 1,
-  "metadata": {
-    "orderId": "ORD-003"
-  }
-}
-```
-
-**Opção B — dados brutos do cartão (`card`):**
-
-O cartão é tokenizado e salvo no cliente, ficando reutilizável depois.
-
-```json
-{
-  "paymentMethod": "creditcard",
-  "amount": 399.9,
-  "title": "Compra avulsa",
-  "description": "Produto Premium",
-  "customer": {
-    "name": "João da Silva",
-    "documentNumber": "12345678901",
-    "email": "joao@email.com"
-  },
-  "card": {
-    "name": "JOAO DA SILVA",
-    "number": "5230552482605921",
-    "cvv": "123",
-    "expiration": "10/2030"
-  },
-  "installments": 1
-}
-```
-
-| Campo (`card`) | Obrig. | Descrição |
-|---|---|---|
-| `number` | ✅ | Número do cartão (13 a 19 dígitos) |
-| `cvv` | ✅ | Código de segurança (3 ou 4 dígitos) |
-| `name` | ✅ | Nome impresso no cartão |
-| `expiration` | ✅ | Validade no formato `MM/YYYY` (ex.: `"10/2030"`) |
-
-**Respostas:**
-
-<details>
-<summary><code>200</code> — Aprovado</summary>
-
-```json
-{
-  "success": true,
-  "chargeId": "cha_xxx",
-  "status": "paid"
-}
-```
-
-</details>
-
-<details>
-<summary><code>402</code> — Cartão recusado</summary>
-
-```json
-{
-  "success": false,
-  "chargeId": "cha_xxx",
-  "status": "failed",
-  "error": "declined"
-}
-```
-
-</details>
-
-<details>
-<summary><code>400</code> — Cliente obrigatório ao enviar cartão</summary>
-
-```json
-{
-  "message": "Cliente é obrigatório para salvar cartão",
-  "code": "CUSTOMER_REQUIRED"
-}
-```
-
-</details>
-
-<details>
-<summary><code>400</code> — Cartão não tokenizado no provider ativo</summary>
-
-```json
-{
-  "message": "Cartão não tokenizado no provider ativo",
-  "code": "CARD_NOT_TOKENIZED"
-}
-```
-
-</details>
-
-<details>
-<summary><code>400</code> — Falha ao processar os dados do cartão</summary>
-
-```json
-{
-  "message": "Falha ao tokenizar cartão",
-  "code": "CARD_TOKENIZATION_FAILED"
-}
-```
-
-</details>
-
----
-
-#### Fluxo 2 — Criar → Capturar (dois passos)
-
-Cria a cobrança sem cartão (fica `PENDING`), depois chama o endpoint de captura para processar o pagamento. Como não há cartão neste passo, `customer` é **opcional**.
-
-**Passo 1 — Criar a cobrança:**
-
-```
-POST {{base_url}}/v1/charges
-```
-
-**Escopo necessário:** `checkouts/write`
-
-```json
-{
-  "paymentMethod": "creditcard",
-  "amount": 399.9,
-  "title": "Compra avulsa",
-  "installments": 3,
-  "passFeesToCustomer": false,
-  "freeInstallments": 1
-}
-```
-
-> Sem `card`/`paymentMethodId`, o retorno traz `installmentOptions` para o cliente escolher as parcelas antes de capturar.
-
-<details>
-<summary><code>200</code> — Cobrança criada (aguardando captura)</summary>
-
-```json
-{
-  "chargeId": "cha_xxx",
-  "maxInstallments": 12,
-  "passFeesToCustomer": false,
-  "freeInstallments": 1
-}
-```
-
-</details>
-
-**Passo 2 — Capturar o pagamento:**
-
-```
-POST {{base_url}}/v1/charges/:id/capture
-```
-
-**Escopo necessário:** `checkouts/write`
-
-Envie `paymentMethodId` **ou** `card` (dados brutos). Como há cartão, `customer` é obrigatório (ao menos `documentNumber`).
-
-```json
-{
-  "paymentMethod": "creditcard",
-  "paymentMethodId": "pm_abc123",
-  "installments": 3,
-  "customer": {
-    "documentNumber": "12345678901",
-    "name": "João da Silva",
-    "email": "joao@email.com"
-  }
-}
-```
-
-<details>
-<summary><code>200</code> — Aprovado</summary>
-
-```json
-{
-  "chargeId": "cha_xxx",
-  "status": "paid"
-}
-```
-
-</details>
-
-<details>
-<summary><code>402</code> — Cartão recusado</summary>
-
-```json
-{
-  "success": false,
-  "chargeId": "cha_xxx",
-  "status": "failed",
-  "error": "declined"
-}
-```
-
-</details>
-
-<details>
-<summary><code>400</code> — Cobrança já paga ou não pagável</summary>
-
-```json
-{
-  "message": "Cobrança não está em estado pagável",
-  "code": "CHARGE_NOT_PAYABLE"
-}
-```
-
-</details>
-
----
-
-#### Fluxo 3 — Checkout transparente
-
-Paga um checkout pré-criado via `POST /v1/checkouts`. Consulte a [seção de Checkouts](#checkouts) para criar o checkout primeiro.
-
-```
-POST {{base_url}}/v1/checkouts/pay
-```
-
-**Escopo necessário:** `checkouts/write`
-
-```json
-{
-  "checkoutId": "chk_xxx",
-  "paymentMethod": "creditcard",
-  "paymentMethodId": "pm_abc123",
-  "installments": 1,
-  "customer": {
-    "name": "João da Silva",
-    "email": "joao@email.com",
-    "documentNumber": "12345678901"
-  },
-  "items": [{ "priceId": "price_xxx" }]
-}
-```
-
-> **Variante com cobrança avulsa:** se você já criou uma cobrança via Fluxo 2, pode pagá-la via `/checkouts/pay` usando `chargeId` no lugar de `checkoutId`:
-> ```json
-> { "chargeId": "cha_xxx", "paymentMethodId": "pm_abc123", "installments": 1 }
-> ```
-
-<details>
-<summary><code>200</code> — Aprovado</summary>
-
-```json
-{
-  "success": true,
-  "chargeId": "cha_xxx",
-  "status": "paid"
-}
-```
-
-</details>
-
-### Listar Cobranças
-
-```
-GET {{base_url}}/v1/charges
-```
-
-**Escopo necessário:** `pix.cob/read`
-
-**Query params:**
-
-| Parâmetro | Obrigatório | Descrição |
-|-----------|-------------|-----------|
-| `limit` | não | Itens por página (padrão: 15) |
-| `lastKey` | não | Código de posição retornado pela última consulta, para carregar a próxima página |
-| `startDate` | não | Data início no formato `2026-07-01T00:00:00Z` |
-| `endDate` | não | Data fim no formato `2026-07-01T00:00:00Z` |
-| `status` | não | Filtro por status |
-| `search` | não | Busca por nome ou e-mail |
-| `document` | não | CPF ou CNPJ do cliente |
-| `paymentMethod` | não | `pix` \| `boleto` \| `creditcard` |
-| `priceId` | não | Filtro por preço |
-| `productId` | não | Filtro por produto |
-
-**Respostas:**
-
-<details>
-<summary><code>200</code> — Sucesso</summary>
-
-```json
-{
-  "items": [
-    {
-      "chargeId": "cha_xxx",
-      "status": "PAID",
-      "amount": 100.0,
-      "paymentType": "PIX",
-      "createdAt": "2026-01-15T10:30:00Z"
-    }
-  ],
-  "pagination": {
-    "total": 20,
-    "hasMore": true,
-    "lastKey": "eyJ..."
-  }
-}
-```
-
-</details>
-
-
-### Buscar Cobrança
-
-```
-GET {{base_url}}/v1/charges/:chargeId
-```
-
-**Escopo necessário:** `pix.cob/read`
-
-**Parâmetros de rota:**
-
-| Parâmetro | Descrição |
-|-----------|-----------|
-| `:chargeId` | ID da cobrança |
-
-**Respostas:**
-
-<details>
-<summary><code>200</code> — PAID</summary>
-
-```json
-{
-  "chargeId": "cha_1771453171013_fp6iocaxb",
-  "status": "PAID",
-  "amount": 100.0,
-  "paymentType": "PIX",
-  "emv": "00020101021226910014br.gov.bcb.pix...",
-  "paidAt": "2026-02-18T22:22:50.031Z",
-  "createdAt": "2026-02-18T22:19:31.013Z"
-}
-```
-
-</details>
-
-<details>
-<summary><code>200</code> — PENDING</summary>
-
-```json
-{
-  "chargeId": "cha_1771453171013_fp6iocaxb",
-  "status": "PENDING",
-  "amount": 10.0,
-  "paymentType": "PIX",
-  "emv": "00020101021226910014br.gov.bcb.pix...",
-  "createdAt": "2026-06-10T10:00:00.000Z"
-}
-```
-
-</details>
-
-<details>
-<summary><code>200</code> — CANCELED</summary>
-
-```json
-{
-  "chargeId": "cha_1771453171013_fp6iocaxb",
-  "status": "CANCELED",
-  "amount": 10.0,
-  "canceledAt": "2026-06-10T10:05:00.000Z",
-  "createdAt": "2026-06-10T10:00:00.000Z"
-}
-```
-
-</details>
-
-<details>
-<summary><code>404</code> — Não encontrada</summary>
-
-```json
-{
-  "error": {
-    "message": "Cobrança cha_xxx não encontrada",
-    "code": "CHARGE_NOT_FOUND",
-    "details": null,
-    "timestamp": "2026-06-10T10:00:00.000Z"
-  }
-}
-```
-
-</details>
-
-
-### Cancelar Cobrança
-
-```
-DELETE {{base_url}}/v1/charges/:chargeId
-```
-
-**Escopo necessário:** `pix.cob/write`
-
-**Parâmetros de rota:**
-
-| Parâmetro | Descrição |
-|-----------|-----------|
-| `:chargeId` | ID da cobrança |
-
-**Respostas:**
-
-<details>
-<summary><code>200</code> — Cancelada</summary>
-
-```json
-{
-  "message": "Cobrança cancelada com sucesso",
-  "chargeId": "cha_1779239661689_g1ugeix0e"
-}
-```
-
-</details>
-
-<details>
-<summary><code>400</code> — Não cancelável</summary>
-
-```json
-{
-  "error": {
-    "message": "Não é possível cancelar uma cobrança com status PAID",
-    "code": "CHARGE_ALREADY_PAID",
-    "details": null,
-    "timestamp": "2026-06-10T10:00:00.000Z"
-  }
-}
-```
-
-</details>
-
-
-### Arquivar Cobrança
-
-```
-POST {{base_url}}/v1/charges/:chargeId/archive
-```
-
-**Escopo necessário:** `pix.cob/write`
-
-**Parâmetros de rota:**
-
-| Parâmetro | Descrição |
-|-----------|-----------|
-| `:chargeId` | ID da cobrança |
-
-**Respostas:**
-
-<details>
-<summary><code>200</code> — Arquivada</summary>
-
-```json
-{
-  "chargeId": "cha_1779238435235_iaw4pcprl",
-  "status": "ARCHIVED",
-  "archivedAt": "2026-05-23T13:06:09.693Z"
-}
-```
-
-</details>
-
-
-### Baixar Boleto
-
-```
-GET {{base_url}}/v1/charges/:chargeId/boleto.pdf
-```
-
-**Escopo necessário:** `pix.cob/read`
-
-Retorna o arquivo PDF do boleto para envio ou exibição ao cliente.
-
-**Parâmetros de rota:**
-
-| Parâmetro | Descrição |
-|-----------|-----------|
-| `:chargeId` | ID da cobrança |
-
-**Query params:**
-
-| Parâmetro | Obrigatório | Descrição |
-|-----------|-------------|-----------|
-| `download` | não | Se `true`, força download do arquivo |
-
-**Respostas:**
-
-- `200` — Arquivo PDF (Content-Type: `application/pdf`)
-- `400` — `CHARGE_NOT_BOLETO` — Cobrança não é boleto
-- `404` — `BOLETO_PDF_NOT_AVAILABLE` — PDF ainda não disponível
-
----
-
-## Checkouts
-
-Dois modelos: **Checkout** (link de pagamento permanente, reutilizável, com aparência personalizada) e **Sessão de Checkout** (link temporário para uso único). Ambos aceitam PIX, boleto e cartão.
-
-### Criar Checkout
-
-```
-POST {{base_url}}/v1/checkouts
-```
-
-**Escopo necessário:** `checkouts/write`
-
-Cria uma página de pagamento configurável com produtos, métodos aceitos, cupons e aparência personalizada.
-
-**Body (JSON):**
-
-```json
-{
-  "priceId": "price_xxx",
-  "allowedPaymentMethods": ["pix", "creditcard", "boleto"],
-  "successUrl": "https://meusite.com/obrigado",
-  "cancelUrl": "https://meusite.com/cancelado",
-  "redirectAfterPaymentUrl": "https://meusite.com/redirect",
-  "successMessage": "Obrigado pela compra!",
-  "maxInstallments": 12,
-  "freeInstallments": 1,
-  "passFeesToCustomer": false,
-  "checkoutName": "Oferta Black Friday",
-  "primaryColor": "#7C3AED",
-  "secondaryColor": "#EDE9FE",
-  "fontColor": "#1F2937",
-  "showProductImage": true,
-  "metadata": {}
-}
-```
-
-**Respostas:**
-
-<details>
-<summary><code>200</code> — Checkout criado</summary>
-
-```json
-{
-  "id": "pl_xxx",
-  "url": "https://app.validapay.com.br/pagamento/pl_xxx",
-  "priceId": "price_xxx"
-}
-```
-
-</details>
-
-
-### Listar Checkouts
-
-```
-GET {{base_url}}/v1/checkouts
-```
-
-**Escopo necessário:** `checkouts/read`
-
-**Query params:**
-
-| Parâmetro | Obrigatório | Descrição |
-|-----------|-------------|-----------|
-| `limit` | não | Itens por página (padrão: 15) |
-| `lastKey` | não | Código de posição retornado pela última consulta, para carregar a próxima página |
-| `status` | não | Filtro por status |
-| `search` | não | Busca por nome |
-
-**Respostas:**
-
-<details>
-<summary><code>200</code> — Sucesso</summary>
-
-```json
-{
-  "items": [
-    {
-      "id": "pl_xxx",
-      "url": "https://app.validapay.com.br/pagamento/pl_xxx",
-      "status": "ACTIVE"
-    }
-  ],
-  "pagination": {
-    "total": 5,
-    "hasMore": false
-  }
-}
-```
-
-</details>
-
-
-### Buscar Checkout
-
-```
-GET {{base_url}}/v1/checkouts/:id
-```
-
-**Escopo necessário:** `checkouts/read`
-
-**Parâmetros de rota:**
-
-| Parâmetro | Descrição |
-|-----------|-----------|
-| `:id` | ID do checkout |
-
-**Respostas:**
-
-<details>
-<summary><code>200</code> — Sucesso</summary>
-
-```json
-{
-  "id": "pl_xxx",
-  "status": "ACTIVE",
-  "priceId": "price_xxx",
-  "allowedPaymentMethods": ["pix", "creditcard"]
-}
-```
-
-</details>
-
-<details>
-<summary><code>404</code> — Não encontrado</summary>
-
-```json
-{
-  "code": "CHECKOUT_NOT_FOUND"
-}
-```
-
-</details>
-
-
-### Atualizar Checkout
-
-```
-PUT {{base_url}}/v1/checkouts/:id
-```
-
-**Escopo necessário:** `checkouts/write`
-
-**Parâmetros de rota:**
-
-| Parâmetro | Descrição |
-|-----------|-----------|
-| `:id` | ID do checkout |
-
-**Body (JSON):**
-
-```json
-{
-  "priceId": "price_yyy",
-  "maxInstallments": 6,
-  "primaryColor": "#FF0000",
-  "showProductImage": false
-}
-```
-
-**Respostas:**
-
-<details>
-<summary><code>200</code> — Atualizado</summary>
-
-```json
-{
-  "id": "pl_xxx",
-  "priceId": "price_yyy"
-}
-```
-
-</details>
-
-
-### Checkout Transparente
-
-```
-POST {{base_url}}/v1/checkouts/pay
-```
-
-**Escopo necessário:** `checkouts/write`
-
-Processa o pagamento diretamente via API, sem redirecionar o cliente para outra página. Ideal quando você quer controlar toda a experiência de pagamento na sua própria interface.
-
-**Body (JSON) — recomendado com SDK de tokenização:**
-
-```json
-{
-  "sessionId": "cs_abc123",
-  "paymentMethod": "creditcard",
-  "customer": {
-    "name": "João da Silva",
-    "email": "joao@email.com",
-    "documentNumber": "12345678901",
-    "phone": "+5511999998888",
-    "address": {
-      "street": "Av. Paulista",
-      "number": "1000",
-      "complement": "Apto 52",
-      "neighborhood": "Bela Vista",
-      "city": "São Paulo",
-      "state": "SP",
-      "zipCode": "01310100",
-      "country": "BR",
-      "cityCode": "3550308"
-    }
-  },
-  "paymentMethodId": "pm_abc123",
-  "installments": 3
-}
-```
-
-> 💡 Use o `paymentMethodId` gerado pelo [`@validapay/tokenize`](#sdk-de-tokenização) para nunca trafegar dados brutos do cartão pelo seu servidor. O campo `card` ainda é aceito, mas não é recomendado.
-
-**Body (JSON) — com dados brutos do cartão (não recomendado):**
-
-```json
-{
-  "sessionId": "cs_abc123",
-  "paymentMethod": "creditcard",
-  "customer": {
-    "name": "João da Silva",
-    "email": "joao@email.com",
-    "documentNumber": "12345678901",
-    "phone": "+5511999998888",
-    "address": {
-      "street": "Av. Paulista",
-      "number": "1000",
-      "complement": "Apto 52",
-      "neighborhood": "Bela Vista",
-      "city": "São Paulo",
-      "state": "SP",
-      "zipCode": "01310100",
-      "country": "BR",
-      "cityCode": "3550308"
-    }
-  },
-  "card": {
-    "number": "4111111111111111",
-    "cvv": "123",
-    "name": "JOAO DA SILVA",
-    "expiration": "12/2027"
-  },
-  "installments": 3
-}
-```
-
-**Respostas:**
-
-<details>
-<summary><code>200</code> — Assinatura cartão</summary>
-
-```json
-{
-  "success": true,
-  "subscriptionId": "sub_xxx",
-  "customerId": "cus_xxx",
-  "chargeId": "cha_xxx"
-}
-```
-
-</details>
-
-<details>
-<summary><code>200</code> — Assinatura PIX</summary>
-
-```json
-{
-  "success": true,
-  "subscriptionId": "sub_xxx",
-  "pix": {
-    "emv": "00020101...",
-    "qrCode": "data:image/png;base64,..."
-  }
-}
-```
-
-</details>
-
-
-### Criar Sessão de Checkout
-
-```
-POST {{base_url}}/v1/checkout-sessions
-```
-
-**Escopo necessário:** `checkouts/write`
-
-Cria um acesso temporário e seguro (uso único) a uma página de pagamento.
-
-> ⚠️ **Atenção:** Uma sessão só pode ser paga uma única vez. Após o pagamento, a sessão é marcada como `completed` e novas tentativas não serão possíveis.
-
-**Body (JSON):**
-
-```json
-{
-  "priceId": "price_abc123",
-  "allowedPaymentMethods": ["pix", "creditcard", "boleto"],
-  "customer": {
-    "name": "João Silva",
-    "email": "joao@email.com",
-    "documentNumber": "12345678901",
-    "phone": "51999999999",
-    "address": {
-      "type": "BILLING",
-      "street": "Rua das Flores",
-      "number": "123",
-      "complement": "Apto 4",
-      "neighborhood": "Centro",
-      "city": "Porto Alegre",
-      "state": "RS",
-      "zipCode": "90010000",
-      "country": "BR",
-      "cityCode": "4314902"
-    }
-  },
-  "items": [
-    { "priceId": "price_abc123", "quantity": 1 }
-  ]
-}
-```
-
-**Respostas:**
-
-<details>
-<summary><code>200</code> — Sessão criada</summary>
-
-```json
-{
-  "id": "cs_abc123",
-  "url": "https://app.validapay.com.br/pagamento/cs_abc123",
-  "priceId": "price_abc123"
-}
-```
-
-</details>
-
-<details>
-<summary><code>400</code> — Dados inválidos</summary>
-
-```json
-{
-  "error": {
-    "code": "INVALID_DATA",
-    "message": "Campo inválido",
-    "details": []
-  }
-}
-```
-
-</details>
-
-
-### Buscar Sessão de Checkout
-
-```
-GET {{base_url}}/v1/checkout-sessions/:id
-```
-
-**Escopo necessário:** `checkouts/read`
-
-**Parâmetros de rota:**
-
-| Parâmetro | Descrição |
-|-----------|-----------|
-| `:id` | ID da sessão |
-
-**Respostas:**
-
-<details>
-<summary><code>200</code> — Sucesso</summary>
-
-```json
-{
-  "id": "cs_xxx",
-  "status": "PENDING",
-  "priceId": "price_xxx",
-  "allowedPaymentMethods": ["pix", "creditcard"]
-}
-```
-
-</details>
-
-<details>
-<summary><code>404</code> — Não encontrada</summary>
-
-```json
-{
-  "code": "SESSION_NOT_FOUND"
-}
-```
-
-</details>
-
----
-
-## Assinaturas
-
-Modelo de cobrança recorrente atrelado a um Produto/Preço. Os ciclos são gerados automaticamente conforme o tipo de recorrência (`recurrenceType`) do preço. Permite subir de plano com cobrança do valor proporcional ao tempo restante no ciclo atual, descer de plano com a mudança agendada para o próximo ciclo, e adicionar itens avulsos à assinatura.
-
-**Ciclo de status:** `TRIALING` → `ACTIVE` → `PAST_DUE` → (`CANCELED` | `PAUSED`)
-
-### Listar Assinaturas
-
-```
-GET {{base_url}}/v1/subscriptions
-```
-
-**Escopo necessário:** `subscriptions/read`
-
-**Query params:**
-
-| Parâmetro | Obrigatório | Descrição |
-|-----------|-------------|-----------|
-| `limit` | não | Itens por página (padrão: 15) |
-| `lastKey` | não | Código de posição retornado pela última consulta, para carregar a próxima página |
-| `startDate` | não | Data início no formato `2026-07-01T00:00:00Z` |
-| `endDate` | não | Data fim no formato `2026-07-01T00:00:00Z` |
-| `status` | não | `ACTIVE` \| `PENDING` \| `CANCELED` \| `PAST_DUE` \| `PAUSED` |
-| `search` | não | Busca por nome ou e-mail do cliente |
-| `document` | não | CPF ou CNPJ do cliente (texto exato, sem busca parcial) |
-| `paymentMethod` | não | `CREDIT_CARD` \| `PIX` \| `BOLETO` |
-| `priceId` | não | Filtro por preço |
-| `productId` | não | Filtro por produto |
-
-**Respostas:**
-
-<details>
-<summary><code>200</code> — Sucesso</summary>
-
-```json
-{
-  "items": [
-    {
-      "subscriptionId": "sub_xxx",
-      "status": "ACTIVE",
-      "interval": "MONTHLY",
-      "billingDay": 15,
-      "currentCycleNumber": 3,
-      "currentCycleAmount": 99.9,
-      "nextCycleChargeDate": "2026-07-15",
-      "customer": {
-        "customerId": "cus_xxx",
-        "name": "João da Silva"
-      }
-    }
-  ],
-  "hasMore": false,
-  "lastKey": null
-}
-```
-
-</details>
-
-
-### Buscar Assinatura
-
-```
-GET {{base_url}}/v1/subscriptions/:subscriptionId
-```
-
-**Escopo necessário:** `subscriptions/read`
-
-**Parâmetros de rota:**
-
-| Parâmetro | Descrição |
-|-----------|-----------|
-| `:subscriptionId` | ID da assinatura |
-
-**Respostas:**
-
-<details>
-<summary><code>200</code> — Assinatura encontrada</summary>
-
-```json
-{
-  "subscriptionId": "sub_xxx",
-  "status": "ACTIVE",
-  "paymentMethod": "CREDIT_CARD",
-  "amount": 99.9,
-  "interval": "MONTHLY",
-  "customerId": "cus_xxx",
-  "customer": {
-    "name": "Isaac Newton",
-    "email": "isaac@example.com",
-    "documentNumber": "12345678920"
-  },
-  "items": [
-    {
-      "itemId": "item_xxxx",
-      "priceId": "price_xxxx",
-      "quantity": 1,
-      "amount": 99.9,
-      "status": "ACTIVE"
-    }
-  ],
-  "upgrades": [],
-  "billingCycles": [],
-  "coupon": null,
-  "currentPeriodStart": "2026-06-01T00:00:00.000Z",
-  "currentPeriodEnd": "2026-07-01T00:00:00.000Z",
-  "createdAt": "2026-01-15T10:00:00.000Z"
-}
-```
-
-</details>
-
-<details>
-<summary><code>404</code> — Não encontrada</summary>
-
-```json
-{
-  "error": {
-    "message": "Assinatura sub_xxxx não encontrada",
-    "code": "SUBSCRIPTION_NOT_FOUND",
-    "details": null,
-    "timestamp": "2026-06-10T10:00:00.000Z"
-  }
-}
-```
-
-</details>
-
-
-### Atualizar Assinatura
-
-```
-PATCH {{base_url}}/v1/subscriptions/:subscriptionId
-```
-
-**Escopo necessário:** `subscriptions/write`
-
-Cancela a assinatura ou altera o plano de um item (subida ou descida de nível).
-
-**Parâmetros de rota:**
-
-| Parâmetro | Descrição |
-|-----------|-----------|
-| `:subscriptionId` | ID da assinatura |
-
-**Body (JSON) — Cancelar:**
-
-```json
-{
-  "action": "cancel",
-  "reason": "Cliente solicitou cancelamento"
-}
-```
-
-**Body (JSON) — Upgrade/Downgrade de item:**
-
-```json
-{
-  "old": {
-    "itemId": "item_xxx"
-  },
-  "new": {
-    "priceId": "price_yyy",
-    "quantity": 2
-  }
-}
-```
-
-**Respostas:**
-
-<details>
-<summary><code>200</code> — Cancelada</summary>
-
-```json
-{
-  "success": true,
-  "status": "CANCELED",
-  "reason": "Cliente solicitou cancelamento"
-}
-```
-
-</details>
-
-<details>
-<summary><code>200</code> — Upgrade realizado</summary>
-
-```json
-{
-  "success": true,
-  "type": "UPGRADE",
-  "chargeId": "cha_xxx",
-  "prorataAmount": 45.0
-}
-```
-
-</details>
-
-
-### Cancelar Assinatura
-
-```
-DELETE {{base_url}}/v1/subscriptions/:subscriptionId
-```
-
-**Escopo necessário:** `subscriptions/write`
-
-**Parâmetros de rota:**
-
-| Parâmetro | Descrição |
-|-----------|-----------|
-| `:subscriptionId` | ID da assinatura |
-
-**Body (JSON):**
-
-```json
-{
-  "reason": "Cliente solicitou"
-}
-```
-
-**Respostas:**
-
-<details>
-<summary><code>200</code> — Cancelada</summary>
-
-```json
-{
-  "success": true,
-  "message": "Assinatura cancelada com sucesso",
-  "status": "CANCELED",
-  "canceledCycles": 2
-}
-```
-
-</details>
-
-<details>
-<summary><code>400</code> — Já cancelada</summary>
-
-```json
-{
-  "code": "SUBSCRIPTION_ALREADY_CANCELED"
-}
-```
-
-</details>
-
-
-### Adicionar Item à Assinatura
-
-```
-POST {{base_url}}/v1/subscriptions/:subscriptionId/items
-```
-
-**Escopo necessário:** `subscriptions/write`
-
-**Parâmetros de rota:**
-
-| Parâmetro | Descrição |
-|-----------|-----------|
-| `:subscriptionId` | ID da assinatura |
-
-**Body (JSON):**
-
-```json
-{
-  "priceId": "price_xxx",
-  "quantity": 1,
-  "type": "RECURRING",
-  "boletoInstructions": {
-    "fine": 2.0,
-    "interest": 1.0
-  },
-  "expirationAfterDueDate": 30
-}
-```
-
-**Respostas:**
-
-<details>
-<summary><code>200</code> — Item adicionado (cartão)</summary>
-
-```json
-{
-  "success": true,
-  "type": "ADD_ITEM",
-  "chargeId": "cha_xxx",
-  "amount": 49.9,
-  "newAmount": 149.8
-}
-```
-
-</details>
-
-<details>
-<summary><code>200</code> — Item adicionado (PIX/Boleto)</summary>
-
-```json
-{
-  "success": true,
-  "type": "ADD_ITEM",
-  "paymentMethod": "PIX",
-  "chargeId": "cha_xxx",
-  "payment": {
-    "emvQrCode": "00020101..."
-  }
-}
-```
-
-</details>
-
-
-### Atualizar Item da Assinatura
-
-```
-PUT {{base_url}}/v1/subscriptions/:subscriptionId/items/:itemId
-```
-
-**Escopo necessário:** `subscriptions/write`
-
-**Parâmetros de rota:**
-
-| Parâmetro | Descrição |
-|-----------|-----------|
-| `:subscriptionId` | ID da assinatura |
-| `:itemId` | ID do item |
-
-**Body (JSON):**
-
-```json
-{
-  "priceId": "price_yyy",
-  "quantity": 2
-}
-```
-
-**Respostas:**
-
-<details>
-<summary><code>200</code> — Upgrade</summary>
-
-```json
-{
-  "success": true,
-  "type": "UPGRADE",
-  "chargeId": "cha_xxx",
-  "prorataAmount": 33.5,
-  "newAmount": 199.9
-}
-```
-
-</details>
-
-<details>
-<summary><code>200</code> — Downgrade agendado</summary>
-
-```json
-{
-  "success": true,
-  "type": "DOWNGRADE",
-  "effectiveAt": "2026-07-01",
-  "newAmount": 59.9
-}
-```
-
-</details>
-
-
-### Cobrar Proporcional (Pro Rata)
-
-```
-POST {{base_url}}/v1/subscriptions/:subscriptionId/prorata
-```
-
-**Escopo necessário:** `subscriptions/write`
-
-Calcula e gera uma cobrança pelo valor proporcional aos dias já utilizados no ciclo atual. Útil quando o cliente muda de plano no meio do período de cobrança.
-
-**Parâmetros de rota:**
-
-| Parâmetro | Descrição |
-|-----------|-----------|
-| `:subscriptionId` | ID da assinatura |
-
-**Body (JSON):**
-
-```json
-{
-  "old": {
-    "priceId": "price_xxx",
-    "quantity": 1
-  },
-  "new": {
-    "priceId": "price_yyy",
-    "quantity": 1
-  }
-}
-```
-
-**Respostas:**
-
-<details>
-<summary><code>200</code> — Pro rata calculado</summary>
-
-```json
-{
-  "subscriptionId": "sub_xxx",
-  "currentAmount": 99.9,
-  "newAmount": 199.9,
-  "prorataAmount": 45.48,
-  "remainingDays": 15,
-  "cycleDays": 31,
-  "currentCredit": 48.34,
-  "nextCycleChargeDate": "2026-07-15"
-}
-```
-
-</details>
-
-<details>
-<summary><code>404</code> — Preço anterior não encontrado</summary>
-
-```json
-{
-  "code": "OLD_PRICE_NOT_FOUND"
-}
-```
-
-</details>
-
----
-
-## Split de Pagamentos
-
-Divide automaticamente o valor de uma cobrança entre múltiplas subcontas. Dois tipos: `fixed` (valor fixo em R$) e `percentage` (percentual do valor bruto). O split é descontado do valor que sobra após a dedução das taxas da ValidaPay.
-
-O split é configurado pelo campo `split` nas rotas de criação de cobrança (ver seção Cobranças). Para gerar cobranças em subcontas com repasse para a conta principal, envie o header `X-Sub-Account`.
-
-**Header necessário ao gerar cobranças em nome de uma subconta:**
-
-| Header | Valor | Descrição |
-|--------|-------|-----------|
-| `X-Sub-Account` | `{{subaccount_number}}` | Obrigatório. Número da subconta onde a cobrança será gerada |
-
-> ⚠️ **Atenção:** O número da subconta é retornado via webhook quando a subconta é aprovada.
-
----
-
-## Cartões de Teste
-
-Use os cartões abaixo em ambiente **sandbox** (`https://sandbox.validapay.com.br`). Eles não funcionam em produção.
-
-| Número | CVV | Validade | Resultado esperado |
-|--------|-----|----------|--------------------|
-| `5230552482605921` | `100` | `12/2030` | Aprovado (`status: "paid"`) |
-
-> **Cartão recusado:** para simular recusa, envie qualquer cartão com número inválido ou CVV incorreto — a API retorna HTTP `402` com `"error": "declined"`.
-
-> Se o cartão aprovado acima for recusado no seu ambiente, verifique:
-> 1. Você está usando a URL de **sandbox**, não produção
-> 2. O token foi gerado com escopo `payment.methods/write` separado do token de cobranças
-> 3. Não há chamadas em rajada — aguarde alguns segundos entre tentativas
-
----
-
-## SDK de Tokenização
-
-O pacote `@validapay/tokenize` converte os dados do cartão em um `paymentMethodId` seguro diretamente no cliente — sem que os dados brutos trafeguem pelo seu servidor.
-
-### Instalação
-
-```bash
-npm install @validapay/tokenize
-# ou
-yarn add @validapay/tokenize
-# ou
-pnpm add @validapay/tokenize
-```
-
-### Como funciona
-
-1. Chame `tokenize()` com `clientId`, `clientSecret`, `card` e `customer`
-2. O SDK envia os dados direto para a ValidaPay
-3. Retorna um `paymentMethodId` seguro
-4. Use o ID para pagar cobranças
-
-### Uso
-
-```js
-import { tokenize } from '@validapay/tokenize';
-
-const result = await tokenize({
-  clientId: 'seu_client_id',
-  clientSecret: 'seu_client_secret',
-  card: {
-    number: '5230552482605921',
-    cardHolderName: 'LUKE SKYWALKER',
-    cvv: '100',
-    expiration: '12/2030',
-  },
-  customer: {
-    name: 'LUKE SKYWALKER',
-    document: '86564950039',
-    email: 'luke@teste.com',
-  },
-});
-
-console.log(result.paymentMethodId); // pm_abc123
-```
-
-### Parâmetros de `tokenize()`
-
-| Parâmetro | Tipo | Descrição |
-|-----------|------|-----------|
-| `clientId` | `string` | Client ID das suas credenciais ValidaPay |
-| `clientSecret` | `string` | Client Secret das suas credenciais ValidaPay |
-| `card.number` | `string` | Número do cartão sem espaços (16 dígitos) |
-| `card.cardHolderName` | `string` | Nome impresso no cartão (caixa alta) |
-| `card.cvv` | `string` | Código de segurança (3 ou 4 dígitos) |
-| `card.expiration` | `string` | Validade no formato MM/YYYY |
-| `customer.name` | `string` | Nome completo do portador do cartão |
-| `customer.document` | `string` | CPF sem formatação (11 dígitos) |
-| `customer.email` | `string` | E-mail do portador |
-
-### Usando o `paymentMethodId` em cobranças
-
-**Pagar cobrança pendente:**
-
-```bash
-curl -X POST https://api.validapay.com.br/v1/charges/{chargeId}/capture \
-  -H "Authorization: Bearer {access_token}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "paymentMethod": "creditcard",
-    "paymentMethodId": "pm_abc123",
-    "installments": 1,
-    "customer": {
-      "documentNumber": "86564950039",
-      "name": "LUKE SKYWALKER",
-      "email": "luke@teste.com"
-    }
-  }'
-```
-
-**Checkout transparente:**
-
-```bash
-curl -X POST https://api.validapay.com.br/v1/checkouts/pay \
-  -H "Authorization: Bearer {access_token}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "sessionId": "cs_abc123",
-    "paymentMethod": "creditcard",
-    "paymentMethodId": "pm_abc123",
-    "installments": 1
-  }'
-```
 
 ---
 
@@ -3906,36 +3227,24 @@ curl -X POST https://api.validapay.com.br/v1/checkouts/pay \
 | `cus_` | Cliente (customer) |
 | `cpn_` | Cupom (coupon) |
 | `txn_` | Transação de carteira |
-| `wth_` | Saque (withdrawal) |
-| `trf_` | Transferência PIX |
-| `ref_` | Reembolso (refund) |
-| `wh_` | Webhook |
-| `pl_` | Checkout (payment link) |
-| `cs_` | Sessão de checkout |
-| `evt_` | Evento de webhook |
 | `prop_` | Proposta de subconta |
 
 ---
 
-## Apêndice — Campos Financeiros (Subcontas)
+## Webhooks
 
-### financialDetails (PF)
+A ValidaPay envia notificações via webhook para a URL informada no campo `webhookUrl` da cobrança.
+O payload segue o formato:
 
-| Campo | Descrição |
-|-------|-----------|
-| `declaredIncome` | Renda declarada (código) |
-| `occupation` | Ocupação profissional (código) |
-| `netWorth` | Patrimônio líquido (código) |
+```json
+{
+  "event": "charge.paid",
+  "chargeId": "cha_xxxx",
+  "status": "PAID",
+  "amount": 10.00,
+  "paidAt": "2026-06-10T10:00:00.000Z",
+  "metadata": { "externalId": "pedido-123" }
+}
+```
 
-### financialOwnerDetails (sócio PJ)
-
-| Campo | Descrição |
-|-------|-----------|
-| `ownerDeclaredIncome` | Renda declarada do sócio |
-| `ownerDeclaredRevenue` | Faturamento declarado do sócio |
-
-### financialCompanyDetails (PJ)
-
-| Campo | Descrição |
-|-------|-----------|
-| `declaredCompanyRevenue` | Faturamento declarado da empresa |
+**Eventos possíveis:** `charge.paid`, `charge.canceled`, `charge.archived`, `charge.refunded`, `subscription.active`, `subscription.past_due`, `subscription.canceled`
