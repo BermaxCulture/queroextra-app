@@ -67,6 +67,16 @@ export function LandingHeader() {
           >
             Para Empresas
           </Link>
+          <Link
+            to="/documentacao"
+            className={`text-[15px] font-sans transition-colors ${
+              pathname === '/documentacao'
+                ? 'font-semibold text-qe-gray-900 relative pb-0.5 after:absolute after:left-0 after:right-0 after:-bottom-0.5 after:h-[2px] after:bg-qe-yellow after:rounded-full'
+                : 'font-medium text-qe-gray-500 hover:text-qe-gray-900'
+            }`}
+          >
+            Documentação
+          </Link>
         </nav>
 
         {/* Desktop CTAs */}
@@ -126,6 +136,15 @@ export function LandingHeader() {
               onClick={closeMenu}
             >
               Para Empresas
+            </Link>
+            <Link
+              to="/documentacao"
+              className={`text-[16px] py-3 font-sans border-b border-qe-gray-100 ${
+                pathname === '/documentacao' ? 'font-bold text-qe-gray-900' : 'font-medium text-qe-gray-700'
+              }`}
+              onClick={closeMenu}
+            >
+              Documentação
             </Link>
             <div className="flex flex-col gap-2 pt-3">
               <Link to="/login" onClick={closeMenu} className="block">
