@@ -9,6 +9,7 @@ import { Badge } from '../Badge'
 export const JobCard: React.FC<JobCardProps> = ({
   category,
   title,
+  companyName,
   location,
   distance,
   date,
@@ -22,7 +23,7 @@ export const JobCard: React.FC<JobCardProps> = ({
   <motion.article
     className={[
       'bg-qe-white rounded-qe-md border border-qe-gray-200 overflow-hidden cursor-pointer',
-      isUrgent ? 'border-t-[3px] border-t-qe-error' : '',
+      isUrgent ? 'border-t-[3px] border-t-qe-navy' : '',
     ].join(' ')}
     whileHover={{ y: -2, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}
     transition={{ duration: 0.15 }}
@@ -43,7 +44,12 @@ export const JobCard: React.FC<JobCardProps> = ({
         </div>
       </div>
 
-      <h3 className="text-[17px] font-bold text-qe-gray-900 mb-2.5 leading-[1.3]">{title}</h3>
+      <h3 className="text-[17px] font-bold text-qe-gray-900 mb-1 leading-[1.3]">{title}</h3>
+      {companyName && (
+        <div className="text-[13px] text-qe-gray-500 font-medium mb-2.5">
+          {companyName}
+        </div>
+      )}
 
       <div className="flex flex-col gap-1 mb-3">
         <div className="flex items-center gap-1.5 text-[13px] text-qe-gray-500">

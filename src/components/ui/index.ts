@@ -37,7 +37,21 @@ export type { ToastProps, ToastMessage } from './Toast'
 export { BottomSheet } from './BottomSheet'
 export type { BottomSheetProps } from './BottomSheet'
 
+export { Modal } from './Modal'
+export type { ModalProps } from './Modal'
+
+export { ResponsiveSheet } from './ResponsiveSheet'
+
 export { EmptyState } from './EmptyState'
 export type { EmptyStateProps } from './EmptyState'
 
 export { SkeletonCard } from './SkeletonCard'
+
+export { Sidebar } from './Sidebar'
+export type { SidebarProps, SidebarItem } from './Sidebar'
+
+export { Select } from './Select'
+export type { SelectProps, SelectOption } from './Select'
+
+export { AvatarCropModal } from './AvatarCropModal'
+export type { AvatarCropModalProps } from './AvatarCropModal'

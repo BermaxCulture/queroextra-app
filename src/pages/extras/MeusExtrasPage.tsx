@@ -1,0 +1,477 @@
+import * as React from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '@/contexts/AuthContext'
+import { supabase } from '@/lib/supabase'
+import {
+  Avatar,
+  Badge,
+  Button,
+  EmptyState,
+  useToast,
+  SkeletonCard,
+  Tabs,
+  ResponsiveSheet,
+} from '@/components/ui'
+import type { TabItem } from '@/components/ui'
+import {
+  Briefcase,
+  MapPin,
+  Calendar,
+  Clock,
+  ChevronRight,
+  Coffee,
+  GlassWater,
+  Sparkles,
+  ClipboardCheck,
+  ClipboardList,
+  Trash2,
+} from 'lucide-react'
+import { ReviewModal } from '@/components/ReviewModal/ReviewModal'
+import { usePendingReviews } from '@/hooks/useReviews'
+import type { PendingReview } from '@/hooks/useReviews'
+
+interface Application {
+  id: string
+  job_id: string
+  status: 'pendente' | 'aprovado' | 'rejeitado' | 'em_andamento' | 'concluido' | 'cancelado'
+  created_at: string
+  jobs: {
+    titulo: string
+    valor: number
+    local: string | null
+    data_inicio: string | null
+    data_fim: string | null
+    categoria: string | null
+    descricao: string | null
+    beneficios: string | null
+    companies: {
+      profiles: {
+        nome: string
+      }
+    } | null
+  } | null
+}
+
+type TabStatus = 'pendente' | 'aprovado' | 'em_andamento' | 'concluido'
+
+export default function MeusExtrasPage() {
+  const { freelancer, profile } = useAuth()
+  const { showToast } = useToast()
+  const navigate = useNavigate()
+
+  const [activeTab, setActiveTab] = React.useState<TabStatus>('pendente')
+  const [applications, setApplications] = React.useState<Application[]>([])
+  const [loading, setLoading] = React.useState(true)
+
+  // Pending reviews
+  const { reviews: pendingReviews, refresh: refreshReviews } = usePendingReviews(profile?.id)
+  const [activeReview,    setActiveReview]    = React.useState<PendingReview | null>(null)
+  const [reviewModalOpen, setReviewModalOpen] = React.useState(false)
+
+  const openReview  = (rev: PendingReview) => { setActiveReview(rev); setReviewModalOpen(true) }
+  const closeReview = () => setReviewModalOpen(false)
+  const handleReviewDone = () => { setReviewModalOpen(false); refreshReviews() }
+
+  // Cancelar candidatura
+  const [cancellingId, setCancellingId] = React.useState<string | null>(null)
+  const [cancelTarget, setCancelTarget] = React.useState<string | null>(null)
+
+  const confirmCancelApplication = async () => {
+    if (!cancelTarget) return
+    try {
+      setCancellingId(cancelTarget)
+      const { error } = await supabase
+        .from('applications')
+        .update({ status: 'cancelado' })
+        .eq('id', cancelTarget)
+      if (error) throw error
+      setApplications((prev) => prev.filter((a) => a.id !== cancelTarget))
+      showToast('Candidatura removida com sucesso.', 'info')
+    } catch (err: any) {
+      const msg = err?.message || (typeof err === 'object' ? JSON.stringify(err) : String(err))
+      showToast(`Erro ao remover: ${msg}`, 'error')
+    } finally {
+      setCancellingId(null)
+      setCancelTarget(null)
+    }
+  }
+
+  // Carregar candidaturas baseado na aba ativa
+  const fetchApplications = React.useCallback(async () => {
+    if (!freelancer?.id) return
+    try {
+      setLoading(true)
+      const { data, error } = await supabase
+        .from('applications')
+        .select(`
+          id,
+          job_id,
+          status,
+          created_at,
+          jobs (
+            titulo,
+            valor,
+            local,
+            data_inicio,
+            data_fim,
+            categoria,
+           descricao,
+           beneficios,
+            companies (
+              profiles (
+                nome
+              )
+            )
+          )
+        `)
+        .eq('freelancer_id', freelancer.id)
+        .eq('status', activeTab)
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      setApplications((data as unknown as Application[]) || [])
+    } catch (err: any) {
+      const msg = err?.message || err?.details || (typeof err === 'object' ? JSON.stringify(err) : String(err))
+      console.error('Erro detalhado ao buscar candidaturas:', err)
+      showToast(`Erro ao carregar candidaturas: ${msg}`, 'error')
+    } finally {
+      setLoading(false)
+    }
+  }, [freelancer, activeTab, showToast])
+
+  React.useEffect(() => {
+    fetchApplications()
+  }, [fetchApplications])
+
+  // Inscrição em Tempo Real via Supabase Realtime
+  React.useEffect(() => {
+    if (!freelancer?.id) return
+
+    const channel = supabase
+      .channel(`realtime-applications-${freelancer.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'applications',
+          filter: `freelancer_id=eq.${freelancer.id}`,
+        },
+        (payload) => {
+          console.log('[Realtime] Alteração em candidatura detectada:', payload)
+          // Recarregar os dados na tela
+          fetchApplications()
+          showToast('Status de candidatura atualizado em tempo real! ⚡', 'info')
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [freelancer?.id, fetchApplications, showToast])
+
+  // Formatação de data
+  const formatJobDate = (dateStr: string | null) => {
+    if (!dateStr) return 'A definir'
+    const date = new Date(dateStr)
+    return date.toLocaleDateString('pt-BR', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+    })
+  }
+
+  // Formatação de horário
+  const formatJobTime = (startStr: string | null, endStr: string | null) => {
+    if (!startStr) return 'A definir'
+    const start = new Date(startStr)
+    const startH = start.getHours().toString().padStart(2, '0')
+    const startM = start.getMinutes().toString().padStart(2, '0')
+    if (!endStr) return `${startH}:${startM}`
+    const end = new Date(endStr)
+    const endH = end.getHours().toString().padStart(2, '0')
+    const endM = end.getMinutes().toString().padStart(2, '0')
+    return `${startH}:${startM} — ${endH}:${endM}`
+  }
+
+  // Retorna ícone correspondente à categoria
+  const getCategoryIcon = (category: string | null) => {
+    const cat = category?.toLowerCase() || ''
+    if (cat.includes('garço') || cat.includes('atend')) return <Coffee className="w-5 h-5 text-qe-gray-500" />
+    if (cat.includes('bar') || cat.includes('drink')) return <GlassWater className="w-5 h-5 text-qe-gray-500" />
+    return <Briefcase className="w-5 h-5 text-qe-gray-500" />
+  };
+
+  // Badges estilizados por status
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'aprovado':
+        return <Badge variant="confirmed">Confirmado</Badge>
+      case 'em_andamento':
+        return <Badge variant="warning">Em Andamento</Badge>
+      case 'concluido':
+        return <Badge variant="info">Finalizado</Badge>
+      case 'rejeitado':
+        return <Badge variant="urgent">Recusado</Badge>
+      case 'cancelado':
+        return <Badge variant="urgent">Cancelado</Badge>
+      default:
+        return <Badge variant="pending">Pendente</Badge>
+    }
+  }
+
+  const getEmptyStateMessage = (status: TabStatus) => {
+    switch (status) {
+      case 'aprovado':
+        return 'Não há extras confirmados no momento.'
+      case 'em_andamento':
+        return 'Não há extras em andamento no momento.'
+      case 'concluido':
+        return 'Não há extras finalizados no momento.'
+      default:
+        return 'Não há extras pendentes no momento.'
+    }
+  }
+
+  const tabs: TabItem[] = [
+    { label: 'Pendentes', value: 'pendente' },
+    { label: 'Confirmados', value: 'aprovado' },
+    { label: 'Em andamento', value: 'em_andamento' },
+    { label: 'Finalizados', value: 'concluido' },
+  ]
+
+  return (
+    <div className="pb-24 lg:pb-8 bg-qe-bg-page min-h-screen">
+      {/* Header Fixo */}
+      <header className="bg-white border-b border-qe-gray-100 px-4 md:px-8 py-5 sticky top-0 z-10 shadow-qe-sm">
+        <div className="max-w-6xl mx-auto">
+          <h1 className="text-[20px] font-bold text-qe-gray-900">Meus Extras</h1>
+          <p className="text-[13px] text-qe-gray-400 mt-1">
+            Acompanhe e gerencie seus trabalhos agendados.
+          </p>
+        </div>
+      </header>
+
+      {/* Review modal */}
+      {activeReview && (
+        <ReviewModal
+          open={reviewModalOpen}
+          onClose={closeReview}
+          reviewId={activeReview.id}
+          avaliadoNome={activeReview.avaliado_nome}
+          avaliadoAvatar={activeReview.avaliado_avatar}
+          jobTitulo={activeReview.job_titulo}
+          onDone={handleReviewDone}
+        />
+      )}
+
+      <main className="max-w-6xl mx-auto px-4 md:px-8 mt-6 space-y-6">
+
+        {/* Avaliações pendentes */}
+        {pendingReviews.length > 0 && (
+          <div className="bg-white rounded-qe-md border border-qe-yellow/40 p-4 shadow-qe-sm space-y-3">
+            <div className="flex items-center gap-2">
+              <ClipboardList size={16} className="text-qe-yellow-text" />
+              <h3 className="text-[15px] font-bold text-qe-gray-900">
+                Avaliações Pendentes
+              </h3>
+              <span className="text-[11px] font-bold bg-qe-yellow/20 text-qe-yellow-text px-2 py-0.5 rounded-full">
+                {pendingReviews.length}
+              </span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {pendingReviews.map((rev) => {
+                const daysLeft = Math.max(0, Math.ceil(
+                  (new Date(rev.expires_at).getTime() - Date.now()) / 86_400_000
+                ))
+                return (
+                  <div
+                    key={rev.id}
+                    className="flex items-center justify-between gap-3 p-3 bg-qe-gray-50 rounded-qe-sm border border-qe-gray-100"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <Avatar size="sm" src={rev.avaliado_avatar ?? undefined} name={rev.avaliado_nome} />
+                      <div className="min-w-0">
+                        <div className="text-[13px] font-bold text-qe-gray-900 truncate">{rev.avaliado_nome}</div>
+                        <div className="text-[11px] text-qe-gray-400 truncate">
+                          {rev.job_titulo} · {daysLeft}d restante{daysLeft !== 1 ? 's' : ''}
+                        </div>
+                      </div>
+                    </div>
+                    <Button variant="primary" size="sm" onClick={() => openReview(rev)}>
+                      Avaliar
+                    </Button>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        <Tabs tabs={tabs} activeTab={activeTab} onChange={(v) => setActiveTab(v as TabStatus)} />
+
+        {/* Listagem */}
+        {loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+            <SkeletonCard />
+            <SkeletonCard />
+          </div>
+        ) : applications.length === 0 ? (
+          <div className="pt-8">
+            <EmptyState
+              icon={<Sparkles className="w-12 h-12 text-qe-gray-300" />}
+              title="Nada por aqui"
+              description={getEmptyStateMessage(activeTab)}
+              action={
+                activeTab === 'pendente' && (
+                  <Button variant="primary" onClick={() => navigate('/extras/explorar')}>
+                    Explorar Extras
+                  </Button>
+                )
+              }
+            />
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+            {applications.map((app) => (
+              <div
+                key={app.id}
+                className="bg-white rounded-qe-md border border-qe-gray-200 p-4 flex flex-col justify-between hover:border-qe-gray-300 transition-colors shadow-qe-sm"
+              >
+                {/* Topo do Card */}
+                <div className="flex justify-between items-start gap-2 mb-3">
+                  {getStatusBadge(app.status)}
+                  <div className="text-right text-[12px] text-qe-gray-500 font-medium">
+                    <div className="flex items-center gap-1 justify-end font-semibold text-qe-gray-950">
+                      <Calendar size={13} className="text-qe-gray-400" />
+                      <span className="capitalize">{formatJobDate(app.jobs?.data_inicio || null)}</span>
+                    </div>
+                    <div className="flex items-center gap-1 justify-end mt-0.5 text-qe-gray-400">
+                      <Clock size={13} />
+                      <span>{formatJobTime(app.jobs?.data_inicio || null, app.jobs?.data_fim || null)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Corpo do Card */}
+                <div className="flex items-start gap-3.5 mb-4">
+                  <div className="w-10 h-10 bg-qe-gray-50 border border-qe-gray-100 rounded-qe-sm flex items-center justify-center shrink-0">
+                    {getCategoryIcon(app.jobs?.categoria || null)}
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-[16px] font-bold text-qe-gray-900 leading-snug truncate">
+                      {app.jobs?.titulo || 'Vaga de Extra'}
+                    </h3>
+                    <p className="text-[13px] text-qe-gray-400 font-medium flex items-center gap-1 mt-1 truncate">
+                      <MapPin size={13} className="shrink-0 text-qe-gray-300" />
+                      <span>
+                        {app.jobs?.companies?.profiles?.nome || 'Estabelecimento'} ·{' '}
+                        {app.jobs?.local || 'Local não informado'}
+                      </span>
+                    </p>
+                  </div>
+                </div>
+
+                {/* Descrição e Benefícios (apenas para finalizados) */}
+                {app.status === 'concluido' && (app.jobs?.descricao || app.jobs?.beneficios) && (
+                  <div className="mb-3 space-y-2">
+                    {app.jobs?.descricao && (
+                      <div className="bg-qe-gray-50 rounded-qe-sm px-3 py-2">
+                        <span className="text-[10px] font-bold text-qe-gray-400 uppercase tracking-[0.5px]">Descrição</span>
+                        <p className="text-[13px] text-qe-gray-600 mt-0.5 leading-snug line-clamp-2">{app.jobs.descricao}</p>
+                      </div>
+                    )}
+                    {app.jobs?.beneficios && (
+                      <div className="bg-qe-gray-50 rounded-qe-sm px-3 py-2">
+                        <span className="text-[10px] font-bold text-qe-gray-400 uppercase tracking-[0.5px]">Benefícios</span>
+                        <p className="text-[13px] text-qe-gray-600 mt-0.5 leading-snug line-clamp-2">{app.jobs.beneficios}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Rodapé do Card */}
+                <div className="flex items-center justify-between pt-3.5 border-t border-qe-gray-100">
+                  <div>
+                    <span className="text-[10px] font-bold text-qe-gray-400 uppercase tracking-[0.5px]">Valor estimado</span>
+                    <div className="text-[18px] font-bold text-qe-gray-900 leading-tight">
+                      R$ {Number(app.jobs?.valor || 0).toLocaleString('pt-BR')}
+                      <span className="text-[11px] text-qe-gray-400 font-normal">/turno</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {app.status === 'aprovado' && (
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        className="flex items-center gap-1.5 font-semibold text-[13px] px-3.5"
+                        onClick={() => navigate(`/extras/checkin/${app.id}`)}
+                      >
+                        <ClipboardCheck size={14} />
+                        Registro de Ponto
+                      </Button>
+                    )}
+                    <Button
+                      variant={app.status === 'aprovado' ? 'ghost' : 'primary'}
+                      size="sm"
+                      className="flex items-center gap-1 font-semibold text-[13px] px-3.5"
+                      onClick={() => navigate(`/extras/vaga/${app.job_id}`)}
+                    >
+                      Ver Detalhes
+                      <ChevronRight size={14} />
+                    </Button>
+                    {app.status === 'pendente' && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="flex items-center gap-1 text-[13px] px-2.5 text-qe-error hover:bg-red-50 border-transparent"
+                        onClick={() => setCancelTarget(app.id)}
+                        loading={cancellingId === app.id}
+                      >
+                        <Trash2 size={14} />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </main>
+
+      <ResponsiveSheet
+        open={!!cancelTarget}
+        onClose={() => !cancellingId && setCancelTarget(null)}
+        title="Deseja remover a candidatura?"
+      >
+        <div className="p-4 pb-8 space-y-4">
+          <p className="text-[14px] text-qe-gray-600 leading-relaxed">
+            Ao confirmar, sua candidatura para esta vaga será removida permanentemente.
+          </p>
+          <div className="flex gap-3">
+            <Button
+              variant="secondary"
+              size="md"
+              className="flex-1"
+              onClick={() => setCancelTarget(null)}
+              disabled={!!cancellingId}
+            >
+              Voltar
+            </Button>
+            <Button
+              variant="danger"
+              size="md"
+              className="flex-1"
+              loading={!!cancellingId}
+              onClick={confirmCancelApplication}
+            >
+              Remover
+            </Button>
+          </div>
+        </div>
+      </ResponsiveSheet>
+    </div>
+  )
+}

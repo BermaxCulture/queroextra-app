@@ -53,7 +53,7 @@ export const InputOTP = React.forwardRef<HTMLDivElement, InputOTPProps>(
     }
 
     return (
-      <div ref={ref} className="flex gap-2" role="group" aria-label="Código OTP">
+      <div ref={ref} className="flex gap-1.5 sm:gap-2" role="group" aria-label="Código OTP">
         {Array.from({ length }).map((_, i) => (
           <input
             key={i}
@@ -68,7 +68,7 @@ export const InputOTP = React.forwardRef<HTMLDivElement, InputOTPProps>(
             onPaste={handlePaste}
             aria-label={`Dígito ${i + 1} de ${length}`}
             className={[
-              'w-12 h-14 text-center text-[22px] font-bold border-[1.5px] rounded-qe-sm font-sans',
+              'w-10 h-12 sm:w-12 sm:h-14 text-center text-[20px] sm:text-[22px] font-bold border-[1.5px] rounded-qe-sm font-sans',
               'text-qe-gray-900 bg-qe-white outline-none transition-all',
               'focus:border-qe-yellow focus:shadow-[0_0_0_3px_rgba(245,192,0,0.15)]',
               values[i]

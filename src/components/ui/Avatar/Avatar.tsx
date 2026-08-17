@@ -24,12 +24,13 @@ export const Avatar: React.FC<AvatarProps> = ({
   name,
   size = 'md',
   verified = false,
+  className,
 }) => {
   const s = sizeMap[size]
   const [imgError, setImgError] = React.useState(false)
 
   return (
-    <span className="relative inline-flex">
+    <span className={['relative inline-flex rounded-full', className].filter(Boolean).join(' ')}>
       <span
         className={[
           s.outer,
