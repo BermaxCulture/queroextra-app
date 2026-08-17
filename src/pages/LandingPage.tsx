@@ -666,6 +666,9 @@ export default function LandingPage() {
               <li>
                 <Link to="/privacidade" className="text-[14px] text-qe-gray-400 hover:text-qe-white transition-colors font-sans">Privacidade</Link>
               </li>
+              <li>
+                <Link to="/documentacao" className="text-[14px] text-qe-gray-400 hover:text-qe-white transition-colors font-sans">Documentação e FAQ</Link>
+              </li>
             </ul>
           </div>
         </div>

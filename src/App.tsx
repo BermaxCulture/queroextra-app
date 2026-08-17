@@ -21,6 +21,7 @@ import { EmpresaRouteGuard } from '@/components/empresa/EmpresaRouteGuard'
 import StylesPage from '@/pages/styles/StylesPage'
 import TermosDeUso from '@/pages/TermosDeUso'
 import Privacidade from '@/pages/Privacidade'
+import Documentacao from '@/pages/Documentacao'
 
 // Páginas Privadas
 import ContratanteHome from '@/pages/contratante/ContratanteHome'
@@ -70,6 +71,7 @@ function App() {
             <Route path="/styles" element={<StylesPage />} />
             <Route path="/termos" element={<TermosDeUso />} />
             <Route path="/privacidade" element={<Privacidade />} />
+            <Route path="/documentacao" element={<Documentacao />} />
 
             {/* --- ROTAS PRIVADAS (PROTEGIDAS) --- */}
             
