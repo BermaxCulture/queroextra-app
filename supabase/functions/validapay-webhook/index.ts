@@ -456,6 +456,62 @@ Deno.serve(async (req) => {
       return json({ message: 'Pagamento processado com sucesso' })
     }
 
+    // ── Devoluções (PIX) ───────────────────────────────────────────────────────
+    // O estorno em si é feito manualmente pelo time direto na ValidaPay (ver
+    // fluxo de disputas — o QueroExtra só marca a transação como 'estornado'
+    // depois que o admin confirma ter feito isso). Esses eventos servem pra
+    // conferir se a devolução real realmente aconteceu — principalmente
+    // 'refund.failed': se ela falhar depois do admin já ter marcado a
+    // transação como estornada, o dinheiro nunca voltou de verdade pra
+    // empresa e alguém precisa intervir.
+    if (event === 'refund.requested' || event === 'refund.confirmed' || event === 'refund.failed') {
+      const chargeId = data.chargeId ?? payload.chargeId
+      const refundId = data.refundId ?? payload.refundId ?? null
+
+      if (!chargeId) {
+        console.warn(`[validapay-webhook] ${event} sem chargeId no payload`)
+        return json({ message: `Evento ${event} recebido sem chargeId` })
+      }
+
+      const { data: tx } = await supabase
+        .from('transactions')
+        .select('id, status, jobs(titulo)')
+        .eq('gateway_charge_id', chargeId)
+        .maybeSingle()
+
+      if (!tx) {
+        console.warn(`[validapay-webhook] ${event} — transação não encontrada para chargeId ${chargeId}`)
+        return json({ message: `Evento ${event} processado (transação não encontrada)` })
+      }
+
+      console.log(`[validapay-webhook] ${event} — chargeId: ${chargeId}, refundId: ${refundId}, transaction: ${tx.id}, status atual: ${tx.status}`)
+
+      if (event === 'refund.failed') {
+        const supportEmail = Deno.env.get('SUPPORT_EMAIL')
+        const jobTitulo = (tx.jobs as any)?.titulo ?? 'vaga'
+        const jaMarcadoEstornado = tx.status === 'estornado'
+        if (supportEmail) {
+          await sendEmail(
+            supportEmail,
+            `🚨 Devolução falhou — ${jobTitulo}`,
+            emailLayout({
+              emoji: '🚨',
+              title: 'Uma devolução falhou na ValidaPay',
+              body: `A devolução da cobrança <strong>${chargeId}</strong> (transação ${tx.id}, refundId: ${refundId ?? '—'}) falhou.
+                     Status atual da transação no QueroExtra: <strong>${tx.status}</strong>.
+                     ${jaMarcadoEstornado
+                       ? '<br><br><strong>Atenção:</strong> o QueroExtra já marcou essa transação como estornada, mas o dinheiro não voltou de verdade — verifique na ValidaPay e resolva manualmente.'
+                       : ''}`,
+            })
+          )
+        } else {
+          console.error('[validapay-webhook] refund.failed sem SUPPORT_EMAIL configurado — alerta não enviado')
+        }
+      }
+
+      return json({ message: `Evento ${event} processado` })
+    }
+
     // ── Evento não mapeado ────────────────────────────────────────────────────
     console.log(`[validapay-webhook] Evento não mapeado: ${event}`)
     return json({ message: `Evento '${event}' recebido mas sem ação mapeada` })

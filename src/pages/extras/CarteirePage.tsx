@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { TopBar, Button, ResponsiveSheet, Input, Select, useToast, EmptyState } from '@/components/ui'
 import {
   Wallet, Clock, CheckCircle, Settings, Landmark, History,
-  ArrowDownToLine, ArrowUpRight, Info, AlertCircle,
+  ArrowDownToLine, ArrowUpRight, Info, AlertCircle, MessageCircleWarning,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
@@ -12,9 +12,16 @@ type Transaction = {
   id: string
   valor_liquido: number
   status: 'pendente' | 'retido' | 'liberado' | 'sacado' | 'estornado'
+  em_disputa: boolean
   created_at: string
   jobs?: { titulo: string }
 }
+
+// Status em que ainda faz sentido reportar um problema — 'pendente' nem foi
+// pago ainda, 'sacado'/'estornado' já são estado terminal (a ValidaPay já
+// valida a titularidade da chave PIX no saque, então não há o que reverter
+// depois de sacado).
+const DISPUTABLE_STATUSES: Transaction['status'][] = ['retido', 'liberado']
 
 // ── Skeletons ────────────────────────────────────────────────────────────────
 function SkeletonStatCard() {
@@ -113,6 +120,11 @@ export function CarteirePage() {
   const [saldoRetido, setSaldoRetido] = useState(0)
   const [transactions, setTransactions] = useState<Transaction[]>([])
 
+  const [isDisputeOpen, setIsDisputeOpen] = useState(false)
+  const [disputeTxId, setDisputeTxId] = useState('')
+  const [disputeReason, setDisputeReason] = useState('')
+  const [submittingDispute, setSubmittingDispute] = useState(false)
+
   const [freelancerId, setFreelancerId] = useState<string | null>(null)
   const [pixKey, setPixKey] = useState('')
   const [pixKeyType, setPixKeyType] = useState('cpf')
@@ -157,7 +169,7 @@ export function CarteirePage() {
 
         const { data: txs, error: txsError } = await supabase
           .from('transactions')
-          .select('id, valor_liquido, status, created_at, jobs:job_id (titulo)')
+          .select('id, valor_liquido, status, em_disputa, created_at, jobs:job_id (titulo)')
           .in('application_id', appIds)
           .order('created_at', { ascending: false })
 
@@ -262,11 +274,48 @@ export function CarteirePage() {
     }
   }
 
+  const handleOpenDispute = async () => {
+    if (!disputeTxId || !disputeReason.trim()) return
+    setSubmittingDispute(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('open-dispute', {
+        body: { transaction_id: disputeTxId, motivo: disputeReason.trim() },
+      })
+      if (error) throw new Error(error.message || 'Erro ao abrir disputa')
+      if (data?.error) throw new Error(data.error)
+
+      setTransactions((prev) =>
+        prev.map((t) => (t.id === disputeTxId ? { ...t, em_disputa: true } : t))
+      )
+      showToast('Disputa registrada! Nosso suporte vai analisar e entrar em contato.', 'success')
+      setIsDisputeOpen(false)
+      setDisputeTxId('')
+      setDisputeReason('')
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao registrar a disputa', 'error')
+    } finally {
+      setSubmittingDispute(false)
+    }
+  }
+
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
 
   const formatCurrencyRaw = (value: number) =>
     value.toFixed(2)
+
+  const disputableTransactions = transactions.filter(
+    (t) => DISPUTABLE_STATUSES.includes(t.status) && !t.em_disputa
+  )
+  const disputeOptions = disputableTransactions.map((t) => ({
+    value: t.id,
+    label: `${t.jobs?.titulo || 'Trabalho Extra'} · ${formatCurrency(Number(t.valor_liquido))} · ${new Date(t.created_at).toLocaleDateString('pt-BR')}`,
+  }))
+
+  const openDisputeSheet = () => {
+    setDisputeTxId(disputableTransactions[0]?.id ?? '')
+    setIsDisputeOpen(true)
+  }
 
   const getStatusDisplay = (status: Transaction['status']) => {
     switch (status) {
@@ -371,6 +420,28 @@ export function CarteirePage() {
           </Button>
         </div>
 
+        {/* ── Card de Suporte ──────────────────────────────────────────────── */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-col items-center text-center space-y-4">
+          <div className="w-12 h-12 bg-red-50 text-red-500 rounded-full flex items-center justify-center">
+            <MessageCircleWarning size={22} />
+          </div>
+          <div>
+            <h3 className="font-semibold text-gray-900">Precisa de ajuda?</h3>
+            <p className="text-sm text-gray-500 mt-1">
+              Teve algum problema com um pagamento? Fale com nosso suporte.
+            </p>
+          </div>
+          <Button
+            variant="secondary"
+            size="lg"
+            className="w-full"
+            disabled={isLoading || disputableTransactions.length === 0}
+            onClick={openDisputeSheet}
+          >
+            {disputableTransactions.length === 0 ? 'Nenhuma transação elegível' : 'Reportar problema'}
+          </Button>
+        </div>
+
         {/* ── Histórico ────────────────────────────────────────────────────── */}
         <section>
           <div className="flex items-center gap-2 mb-3">
@@ -403,7 +474,7 @@ export function CarteirePage() {
                       <p className="font-medium text-sm text-gray-900 truncate">
                         {tx.jobs?.titulo || 'Trabalho Extra'}
                       </p>
-                      <div className="flex items-center gap-1.5 mt-1">
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                         {st.icon}
                         <span className={`text-xs font-medium ${st.color}`}>{st.label}</span>
                         <span className="text-gray-300">•</span>
@@ -411,6 +482,11 @@ export function CarteirePage() {
                           {new Date(tx.created_at).toLocaleDateString('pt-BR')}
                         </span>
                       </div>
+                      {tx.em_disputa && (
+                        <span className="inline-flex items-center gap-1 mt-1.5 text-[11px] font-semibold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
+                          <MessageCircleWarning size={11} /> Disputa em análise
+                        </span>
+                      )}
                     </div>
                     <span className={`ml-4 font-semibold text-sm ${tx.status === 'sacado' ? 'text-gray-500' : 'text-green-600'}`}>
                       {formatCurrency(Number(tx.valor_liquido))}
@@ -530,6 +606,49 @@ export function CarteirePage() {
             disabled={!pixKey}
           >
             Salvar Chave PIX
+          </Button>
+        </div>
+      </ResponsiveSheet>
+
+      {/* ── Reportar problema (modal no desktop, bottom sheet no mobile) ────── */}
+      <ResponsiveSheet
+        open={isDisputeOpen}
+        onClose={() => { setIsDisputeOpen(false); setDisputeTxId(''); setDisputeReason('') }}
+        title="Reportar problema"
+      >
+        <div className="p-4 space-y-5">
+          <p className="text-sm text-gray-600">
+            Conte pra gente o que aconteceu. Nosso suporte vai analisar e entrar em contato para resolver.
+          </p>
+
+          <Select
+            label="Qual transação?"
+            value={disputeTxId}
+            onChange={setDisputeTxId}
+            options={disputeOptions}
+            placeholder="Selecione a transação..."
+          />
+
+          <div>
+            <label className="text-sm font-medium text-gray-700 mb-1.5 block">O que aconteceu?</label>
+            <textarea
+              value={disputeReason}
+              onChange={(e) => setDisputeReason(e.target.value)}
+              placeholder="Ex: fiz o turno completo mas a empresa não confirma o checkout..."
+              rows={4}
+              className="w-full border border-gray-300 rounded-xl px-3.5 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none transition-all"
+            />
+          </div>
+
+          <Button
+            variant="primary"
+            size="lg"
+            className="w-full"
+            disabled={!disputeTxId || !disputeReason.trim()}
+            loading={submittingDispute}
+            onClick={handleOpenDispute}
+          >
+            Enviar para o suporte
           </Button>
         </div>
       </ResponsiveSheet>
