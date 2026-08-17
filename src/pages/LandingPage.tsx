@@ -261,23 +261,6 @@ export default function LandingPage() {
                             <span style={{ color: 'var(--qe-navy)' }}>Quero</span>
                             <span style={{ color: 'var(--qe-yellow)' }}>Extra</span>
                           </div>
-
-                          {/* Em breve */}
-                          <span
-                            style={{
-                              color: 'var(--qe-gray-400)',
-                              fontSize: '11px',
-                              fontFamily: 'var(--qe-font)',
-                              letterSpacing: '0.5px',
-                              textTransform: 'uppercase',
-                              textAlign: 'center',
-                              paddingLeft: '12px',
-                              paddingRight: '12px',
-                              lineHeight: '1.4',
-                            }}
-                          >
-                            Em breve imagens do app
-                          </span>
                         </div>
                       </div>
                     </div>
