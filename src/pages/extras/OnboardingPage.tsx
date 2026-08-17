@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -543,10 +543,12 @@ function StepKyc({
           </a>
         </>
       ) : (
-        <p className="text-[12px] text-qe-gray-500 bg-qe-yellow-subtle/50 border border-qe-yellow/20 rounded-qe-md p-3">
-          Estamos processando seu cadastro. O link para envio dos documentos será gerado em instantes.<br/><br/>
-          Você pode fechar esta tela. Assim que o link estiver pronto, um card de Validação Pendente aparecerá no canto da tela!
-        </p>
+        <div className="flex flex-col items-center gap-3 bg-qe-yellow-subtle/50 border border-qe-yellow/20 rounded-qe-md p-4">
+          <div className="w-6 h-6 border-2 border-qe-yellow border-t-transparent rounded-full animate-spin" />
+          <p className="text-[12px] text-qe-gray-500 leading-relaxed text-center">
+            Estamos processando seu cadastro — pode levar até 5 minutos. O link para envio dos documentos vai aparecer aqui automaticamente assim que estiver pronto, e também enviamos por e-mail, caso você feche esta tela.
+          </p>
+        </div>
       )}
 
       <button
@@ -611,7 +613,11 @@ function OnboardingMiniBadge({ onExpand }: { onExpand: () => void }) {
 
 const IS_SANDBOX = import.meta.env.VITE_VALIDAPAY_ENV === 'sandbox'
 
-function KycPendingBadge({ url }: { url: string }) {
+type KycPendingBadgeProps =
+  | { documentsReceived: true; url?: undefined }
+  | { documentsReceived?: false; url: string }
+
+function KycPendingBadge(props: KycPendingBadgeProps) {
   const { refreshFreelancer } = useAuth()
   const { showToast } = useToast()
   const [expanded, setExpanded] = useState(false)
@@ -619,7 +625,8 @@ function KycPendingBadge({ url }: { url: string }) {
   const [simulating, setSimulating] = useState(false)
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(url)
+    if (!props.url) return
+    await navigator.clipboard.writeText(props.url)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -638,6 +645,36 @@ function KycPendingBadge({ url }: { url: string }) {
       setSimulating(false)
     }
   }
+
+  // Documentos já recebidos e validados na checagem inicial — sem QR code,
+  // só aguardando a análise final (onboarding.create).
+  if (props.documentsReceived) {
+    return (
+      <AnimatePresence>
+        <motion.div
+          initial={{ opacity: 0, y: 20, scale: 0.95 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 20, scale: 0.95 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+          className="fixed bottom-20 right-4 z-[9997] lg:bottom-6 w-[280px]"
+        >
+          <div className="bg-qe-white rounded-qe-lg shadow-qe-lg border border-qe-gray-200 overflow-hidden">
+            <div className="flex items-center gap-2 px-4 py-3 bg-green-50 border-b border-green-200">
+              <CheckCircle2 size={15} className="text-green-600 shrink-0" />
+              <span className="text-[13px] font-bold text-green-700 flex-1">Documentos recebidos</span>
+            </div>
+            <div className="px-4 py-3">
+              <p className="text-[12px] text-qe-gray-500 leading-snug">
+                Sua conta está na análise final. Aprovação em até 24h — vamos te avisar por e-mail assim que estiver pronta.
+              </p>
+            </div>
+          </div>
+        </motion.div>
+      </AnimatePresence>
+    )
+  }
+
+  const url = props.url
 
   return (
     <AnimatePresence>
@@ -736,11 +773,131 @@ function KycPendingBadge({ url }: { url: string }) {
   )
 }
 
+// ─── KYC Rejected Badge ──────────────────────────────────────────────────────
+
+function KycRejectedBadge({ onRetry }: { onRetry: () => void }) {
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0, y: 20, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 20, scale: 0.95 }}
+        transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+        className="fixed bottom-20 right-4 z-[9997] lg:bottom-6 w-[280px]"
+      >
+        <button
+          type="button"
+          onClick={onRetry}
+          className="w-full text-left bg-qe-white rounded-qe-lg shadow-qe-lg border border-red-200 overflow-hidden cursor-pointer"
+        >
+          <div className="flex items-center gap-2 px-4 py-3 bg-red-50 border-b border-red-200">
+            <AlertCircle size={15} className="text-red-600 shrink-0" />
+            <span className="text-[13px] font-bold text-red-700 flex-1">Documentos não aprovados</span>
+          </div>
+          <div className="px-4 py-3">
+            <p className="text-[12px] text-qe-gray-500 leading-snug">
+              Não conseguimos validar seus documentos. Toque aqui para tentar novamente.
+            </p>
+          </div>
+        </button>
+      </motion.div>
+    </AnimatePresence>
+  )
+}
+
+// ─── Confete + Modal de aprovação ────────────────────────────────────────────
+
+function Confetti() {
+  // Gerado uma única vez via inicializador preguiçoso do useState — chamar
+  // Math.random() direto no corpo do render reposicionaria as partículas a
+  // cada re-render (efeito visual quebrado, além de impuro pro React).
+  const [pieces] = useState(() => {
+    const colors = ['#F5C000', '#1A9E5C', '#D93025', '#1A2332', '#E0AF00']
+    return Array.from({ length: 40 }, (_, i) => ({
+      left: Math.random() * 100,
+      delay: Math.random() * 0.4,
+      duration: 1.8 + Math.random() * 1.2,
+      rotate: Math.random() * 360,
+      color: colors[i % colors.length],
+    }))
+  })
+
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
+      <style>{`
+        @keyframes qe-confetti-fall {
+          0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+          100% { transform: translateY(420px) rotate(540deg); opacity: 0; }
+        }
+      `}</style>
+      {pieces.map((p, i) => (
+        <span
+          key={i}
+          style={{
+            position: 'absolute',
+            top: '-10px',
+            left: `${p.left}%`,
+            width: 8,
+            height: 14,
+            backgroundColor: p.color,
+            transform: `rotate(${p.rotate}deg)`,
+            animation: `qe-confetti-fall ${p.duration}s ${p.delay}s ease-in forwards`,
+          }}
+        />
+      ))}
+    </div>
+  )
+}
+
+function ApprovalCelebrationModal({ freelancerId }: { freelancerId: string }) {
+  const { refreshFreelancer } = useAuth()
+  const [visible, setVisible] = useState(true)
+  const markedRef = useRef(false)
+
+  // Marca como vista assim que aparece — não espera o fechamento, pra não
+  // repetir a celebração se a pessoa navegar pra outra página antes de fechar.
+  useEffect(() => {
+    if (markedRef.current) return
+    markedRef.current = true
+    supabase
+      .from('freelancers')
+      .update({ validapay_approval_seen_at: new Date().toISOString() })
+      .eq('id', freelancerId)
+      .then(() => {})
+  }, [freelancerId])
+
+  const handleClose = async () => {
+    setVisible(false)
+    await refreshFreelancer()
+  }
+
+  return (
+    <Modal open={visible} onClose={handleClose}>
+      <div className="relative text-center space-y-5 py-2">
+        <Confetti />
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-qe-success-bg mx-auto">
+          <CheckCircle2 size={34} className="text-qe-success" />
+        </div>
+        <div>
+          <h2 className="text-[20px] font-bold text-qe-gray-900">Conta aprovada! 🎉</h2>
+          <p className="text-[14px] text-qe-gray-500 mt-2 leading-relaxed">
+            Sua conta de recebimento está pronta. Agora você já pode se candidatar a vagas e receber seus pagamentos direto por Pix.
+          </p>
+        </div>
+        <Button size="lg" className="w-full" onClick={handleClose}>
+          Começar a buscar vagas
+        </Button>
+      </div>
+    </Modal>
+  )
+}
+
 // ─── Componente principal exportável ─────────────────────────────────────────
 
 export default function OnboardingModal() {
   const { freelancer, refreshFreelancer } = useAuth()
   const [open, setOpen] = useState(false)
+  const [retrying, setRetrying] = useState(false)
 
   useEffect(() => {
     if (freelancer?.validapay_onboarding_status === null) {
@@ -753,15 +910,68 @@ export default function OnboardingModal() {
   const [submitting, setSubmitting] = useState(false)
   const { showToast } = useToast()
 
-  // Não renderiza nada se o onboarding já foi aprovado
-  if (!freelancer || freelancer.validapay_onboarding_status === 'aprovado') {
-    return null
+  // A URL de documentos chega de forma assíncrona (webhook onboarding.documentscopy
+  // da Valida Pay) — enquanto o passo 3 estiver aberto e a URL ainda não tiver
+  // chegado, consulta o freelancer periodicamente pra atualizar o modal sozinho,
+  // sem precisar fechar/reabrir. Consulta direto (não via refreshFreelancer/
+  // contexto) porque atualizar validapay_onboarding_status no contexto aqui
+  // acionaria o early-return de 'em_analise' logo abaixo e esconderia este modal.
+  useEffect(() => {
+    if (step !== 3 || urlDocumentscopy || !freelancer?.id) return
+
+    let cancelled = false
+    const poll = async () => {
+      const { data } = await supabase
+        .from('freelancers')
+        .select('validapay_url_documentscopy')
+        .eq('id', freelancer.id)
+        .maybeSingle()
+
+      if (!cancelled && data?.validapay_url_documentscopy) {
+        setUrlDocumentscopy(data.validapay_url_documentscopy)
+      }
+    }
+
+    const interval = setInterval(poll, 3000)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [step, urlDocumentscopy, freelancer?.id])
+
+  if (!freelancer) return null
+
+  const status = freelancer.validapay_onboarding_status
+
+  // Conta aprovada: mostra a celebração uma única vez (validapay_approval_seen_at
+  // controla isso), depois some de vez — não faz mais parte do fluxo de onboarding.
+  if (status === 'aprovado') {
+    return freelancer.validapay_approval_seen_at
+      ? null
+      : <ApprovalCelebrationModal freelancerId={freelancer.id} />
   }
 
-  if (freelancer.validapay_onboarding_status === 'em_analise') {
+  if (status === 'em_analise') {
+    if (freelancer.validapay_documents_received_at) {
+      return <KycPendingBadge documentsReceived />
+    }
     return freelancer.validapay_url_documentscopy
       ? <KycPendingBadge url={freelancer.validapay_url_documentscopy} />
       : null
+  }
+
+  const handleRetry = () => {
+    setStep(1)
+    setAddressData(null)
+    setUrlDocumentscopy(null)
+    setOpen(true)
+    setRetrying(true)
+  }
+
+  // Documentos rejeitados: badge de aviso até a pessoa tocar pra tentar de
+  // novo — só então cai pro formulário abaixo (mesmo fluxo do zero).
+  if (status === 'rejeitado' && !retrying) {
+    return <KycRejectedBadge onRetry={handleRetry} />
   }
 
   const handleExpand = () => setOpen(true)

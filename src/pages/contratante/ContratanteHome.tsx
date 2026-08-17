@@ -8,6 +8,7 @@ import NovaVaga from '../empresa/NovaVaga'
 import Candidatos from '../empresa/Candidatos'
 import EmpresaCarteira from '../empresa/EmpresaCarteira'
 import EmpresaPerfil from '../empresa/EmpresaPerfil'
+import PrestadoresBloqueados from '../empresa/PrestadoresBloqueados'
 import VagasLista from '../empresa/VagasLista'
 import VagaDetalhe from '../empresa/VagaDetalhe'
 import CheckInHub from '../empresa/CheckInHub'
@@ -46,6 +47,7 @@ export default function ContratanteHome() {
     if (path.includes('/empresa/candidatos')) return 'Candidatos'
     if (path.includes('/empresa/carteira')) return 'Minha Carteira'
     if (path.includes('/empresa/perfil-publico')) return 'Prévia do Perfil'
+    if (path.includes('/empresa/prestadores-bloqueados')) return 'Prestadores Bloqueados'
     if (path.includes('/empresa/perfil')) return 'Meu Perfil'
     if (path.includes('/empresa/nova-vaga')) return 'Publicar Vaga'
     if (/\/empresa\/vagas\/[^/]+\/checkin\/.+/.test(path)) return 'Check-In Hub'
@@ -66,6 +68,7 @@ export default function ContratanteHome() {
     const checkinMatch = path.match(/\/empresa\/vagas\/([^/]+)\/checkin\/.+/)
     if (checkinMatch) return `/empresa/vagas/${checkinMatch[1]}?tab=candidatos&candidatoStatus=aprovado`
     if (/\/empresa\/vagas\/.+/.test(path)) return '/empresa/vagas'
+    if (path.includes('/empresa/prestadores-bloqueados')) return '/empresa/perfil'
     return '/empresa/gestao'
   }
 
@@ -95,6 +98,7 @@ export default function ContratanteHome() {
     location.pathname.includes('/nova-vaga') ||
     location.pathname.includes('/candidatos') ||
     location.pathname.includes('/perfil-publico') ||
+    location.pathname.includes('/prestadores-bloqueados') ||
     /\/empresa\/vagas\/.+/.test(location.pathname)
 
   const activeItemPath = location.pathname.startsWith('/empresa/vagas')
@@ -140,6 +144,7 @@ export default function ContratanteHome() {
             <Route path="vagas/:id" element={<VagaDetalhe />} />
             <Route path="carteira" element={<EmpresaCarteira />} />
             <Route path="perfil" element={<EmpresaPerfil />} />
+            <Route path="prestadores-bloqueados" element={<PrestadoresBloqueados />} />
             <Route path="perfil-publico" element={<EmpresaPreviewWrapper />} />
             <Route path="" element={<Navigate to="gestao" replace />} />
           </Routes>

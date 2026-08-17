@@ -29,3 +29,5 @@ scratch/
 mcp_tools.json
 auth_logs.json
 *.mcp.json
+# Scripts locais com credenciais de teste hardcoded — nunca commitar
+valida-pay-test*

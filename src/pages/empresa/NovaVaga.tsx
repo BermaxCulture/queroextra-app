@@ -24,26 +24,31 @@ import {
 } from 'lucide-react'
 import { JOB_CATEGORIES, JOB_TAGS, BRAZIL_STATES } from './jobConstants'
 
-const jobSchema = z.object({
-  titulo: z
-    .string()
-    .min(5, 'O título deve ter pelo menos 5 caracteres')
-    .max(80, 'O título deve ter no máximo 80 caracteres'),
-  categoria: z.string().min(1, 'Selecione uma categoria'),
-  estado: z.string().min(2, 'Selecione o estado'),
-  cidade: z.string().min(2, 'Informe a cidade'),
-  local: z.string().min(5, 'Informe o endereço completo do local'),
-  valor: z.coerce.number().min(50, 'O valor mínimo do turno é R$ 50,00'),
-  data_inicio: z.string().min(1, 'Informe a data e hora de início'),
-  data_fim: z.string().min(1, 'Informe a data e hora de término'),
-  descricao: z
-    .string()
-    .min(10, 'Descreva detalhadamente a vaga (mínimo 10 caracteres)'),
-  beneficios: z.string().optional(),
-  urgente: z.boolean().default(false),
-})
+const VALOR_MINIMO_PADRAO = 50
+const VALOR_MINIMO_TESTE = 1
 
-type JobFormData = z.infer<typeof jobSchema>
+function buildJobSchema(valorMinimo: number) {
+  return z.object({
+    titulo: z
+      .string()
+      .min(5, 'O título deve ter pelo menos 5 caracteres')
+      .max(80, 'O título deve ter no máximo 80 caracteres'),
+    categoria: z.string().min(1, 'Selecione uma categoria'),
+    estado: z.string().min(2, 'Selecione o estado'),
+    cidade: z.string().min(2, 'Informe a cidade'),
+    local: z.string().min(5, 'Informe o endereço completo do local'),
+    valor: z.coerce.number().min(valorMinimo, `O valor mínimo do turno é R$ ${valorMinimo.toFixed(2).replace('.', ',')}`),
+    data_inicio: z.string().min(1, 'Informe a data e hora de início'),
+    data_fim: z.string().min(1, 'Informe a data e hora de término'),
+    descricao: z
+      .string()
+      .min(10, 'Descreva detalhadamente a vaga (mínimo 10 caracteres)'),
+    beneficios: z.string().optional(),
+    urgente: z.boolean().default(false),
+  })
+}
+
+type JobFormData = z.infer<ReturnType<typeof buildJobSchema>>
 
 function NovaVagaSkeleton() {
   return (
@@ -92,6 +97,12 @@ export default function NovaVaga() {
   const [limitModalOpen, setLimitModalOpen] = React.useState(false)
   const [isSubmitting, setIsSubmitting] = React.useState(false)
   const [selectedTags, setSelectedTags] = React.useState<string[]>([])
+
+  // Empresas marcadas como conta de teste (companies.is_test_account) podem
+  // publicar vagas de valor baixo real para testar o pagamento — mesma regra
+  // aplicada no banco via trigger, sem afetar o mínimo de R$50 para as demais.
+  const valorMinimo = company?.is_test_account ? VALOR_MINIMO_TESTE : VALOR_MINIMO_PADRAO
+  const jobSchema = React.useMemo(() => buildJobSchema(valorMinimo), [valorMinimo])
 
   const {
     register,
@@ -296,7 +307,11 @@ export default function NovaVaga() {
           type="number"
           placeholder="Ex: 150"
           icon={<DollarSign size={18} />}
-          helperText="Valor pago direto ao profissional ao final do expediente. Mínimo de R$ 50,00."
+          helperText={
+            company?.is_test_account
+              ? `Conta de teste — mínimo de R$ ${VALOR_MINIMO_TESTE.toFixed(2).replace('.', ',')} para validar pagamentos sem gastar o valor cheio.`
+              : `Valor pago direto ao profissional ao final do expediente. Mínimo de R$ ${VALOR_MINIMO_PADRAO.toFixed(2).replace('.', ',')}.`
+          }
           errorMessage={errors.valor?.message}
           {...register('valor')}
         />

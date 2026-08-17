@@ -11,7 +11,8 @@ import {
   useToast,
   Input,
 } from '@/components/ui'
-import { Briefcase, Search, MapPin, X } from 'lucide-react'
+import { Briefcase, Search, MapPin, X, LayoutGrid } from 'lucide-react'
+import { JOB_CATEGORIES, JOB_CATEGORY_ICONS } from '@/pages/empresa/jobConstants'
 
 interface JobWithCompany {
   id: string
@@ -45,7 +46,8 @@ export default function VagasExplorarPage() {
   const [jobs, setJobs] = React.useState<JobWithCompany[]>([])
   const [appliedJobIds, setAppliedJobIds] = React.useState<Set<string>>(new Set())
   const [loading, setLoading] = React.useState(true)
-  const [activeFilter, setActiveFilter] = React.useState('Todos os Tipos')
+  const [selectedCategory, setSelectedCategory] = React.useState<string | null>(null)
+  const [sortMode, setSortMode] = React.useState<'recentes' | 'maior_valor' | 'mais_proximo'>('recentes')
   const [searchTerm, setSearchTerm] = React.useState('')
   const [showSearchInput, setShowSearchInput] = React.useState(false)
 
@@ -174,40 +176,25 @@ export default function VagasExplorarPage() {
       )
     }
 
-    // Filtros de Categoria
-    if (activeFilter === 'Garçom') {
-      result = result.filter(
-        (job) =>
-          job.categoria?.toLowerCase().includes('garço') ||
-          job.categoria?.toLowerCase().includes('garconete')
-      )
-    } else if (activeFilter === 'Cozinha') {
-      result = result.filter(
-        (job) =>
-          job.categoria?.toLowerCase().includes('cozinha') ||
-          job.categoria?.toLowerCase().includes('cozinheiro')
-      )
-    } else if (activeFilter === 'Bartender') {
-      result = result.filter((job) => job.categoria?.toLowerCase() === 'bartender')
+    // Filtro por categoria (grid estilo iFood — match exato com jobs.categoria)
+    if (selectedCategory) {
+      result = result.filter((job) => job.categoria === selectedCategory)
     }
 
-    // Filtros de Ordenação
-    if (activeFilter === 'Maior Valor') {
+    // Ordenação
+    if (sortMode === 'maior_valor') {
       result.sort((a, b) => b.valor - a.valor)
-    } else if (activeFilter === 'Mais Próximo') {
+    } else if (sortMode === 'mais_proximo') {
       result.sort((a, b) => (a.id < b.id ? -1 : 1))
     }
 
     return result
-  }, [jobs, appliedJobIds, activeFilter, searchTerm, cidadeFilter, estadoFilter])
+  }, [jobs, appliedJobIds, selectedCategory, sortMode, searchTerm, cidadeFilter, estadoFilter])
 
-  const filters = [
-    'Todos os Tipos',
-    'Maior Valor',
-    'Mais Próximo',
-    'Garçom',
-    'Cozinha',
-    'Bartender',
+  const sortOptions: { value: typeof sortMode; label: string }[] = [
+    { value: 'recentes', label: 'Mais recentes' },
+    { value: 'maior_valor', label: 'Maior valor' },
+    { value: 'mais_proximo', label: 'Mais próximo' },
   ]
 
   const hasLocationFilter = cidadeFilter || estadoFilter
@@ -268,17 +255,67 @@ export default function VagasExplorarPage() {
 
       <div className="max-w-6xl mx-auto px-4 md:px-8 py-6 space-y-5">
 
-        {/* Filtros de categoria deslizáveis */}
-        <div className="overflow-x-auto whitespace-nowrap py-1 flex gap-2 scrollbar-none">
-          {filters.map((f) => (
-            <Chip
-              key={f}
-              label={f}
-              variant="skill"
-              selected={activeFilter === f}
-              onClick={() => setActiveFilter(f)}
-            />
-          ))}
+        {/* Grid de categorias estilo iFood */}
+        <div className="space-y-2.5">
+          <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3">
+            <button
+              type="button"
+              onClick={() => setSelectedCategory(null)}
+              className="flex flex-col items-center gap-1.5 group"
+            >
+              <span
+                className={[
+                  'w-14 h-14 rounded-2xl flex items-center justify-center transition-colors border-[1.5px]',
+                  selectedCategory === null
+                    ? 'bg-qe-yellow border-qe-yellow text-qe-black'
+                    : 'bg-qe-white border-qe-gray-200 text-qe-gray-600 group-hover:border-qe-gray-400',
+                ].join(' ')}
+              >
+                <LayoutGrid size={22} />
+              </span>
+              <span className="text-[11px] font-semibold text-qe-gray-700 text-center leading-tight">Todos</span>
+            </button>
+
+            {JOB_CATEGORIES.map((categoria) => {
+              const Icon = JOB_CATEGORY_ICONS[categoria]
+              const selected = selectedCategory === categoria
+              return (
+                <button
+                  key={categoria}
+                  type="button"
+                  onClick={() => setSelectedCategory(selected ? null : categoria)}
+                  className="flex flex-col items-center gap-1.5 group"
+                >
+                  <span
+                    className={[
+                      'w-14 h-14 rounded-2xl flex items-center justify-center transition-colors border-[1.5px]',
+                      selected
+                        ? 'bg-qe-yellow border-qe-yellow text-qe-black'
+                        : 'bg-qe-white border-qe-gray-200 text-qe-gray-600 group-hover:border-qe-gray-400',
+                    ].join(' ')}
+                  >
+                    {Icon && <Icon size={22} />}
+                  </span>
+                  <span className="text-[11px] font-semibold text-qe-gray-700 text-center leading-tight">
+                    {categoria}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Ordenação */}
+          <div className="overflow-x-auto whitespace-nowrap py-1 flex gap-2 scrollbar-none">
+            {sortOptions.map((opt) => (
+              <Chip
+                key={opt.value}
+                label={opt.label}
+                variant="filter"
+                selected={sortMode === opt.value}
+                onClick={() => setSortMode(opt.value)}
+              />
+            ))}
+          </div>
         </div>
 
         {/* Filtros de Localização */}

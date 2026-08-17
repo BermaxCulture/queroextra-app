@@ -2,8 +2,10 @@ import * as React from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
+import { uploadAvatar } from '@/services/storage/uploadFile'
 import {
   Avatar,
+  AvatarCropModal,
   Button,
   useToast,
 } from '@/components/ui'
@@ -17,7 +19,12 @@ import {
   Save,
   X,
   Plus,
+  Trash2,
 } from 'lucide-react'
+
+const AVATAR_MAX_SIZE_BYTES = 5 * 1024 * 1024 // 5MB
+const AVATAR_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp']
+const BIO_MAX_LENGTH = 500
 
 interface Review {
   id: string
@@ -43,7 +50,7 @@ interface ProfileData {
     id: string
     habilidades: string[] | null
     bio: string | null
-  }[] | null
+  } | null
 }
 
 interface PerfilPageProps {
@@ -95,6 +102,10 @@ export default function PerfilPage({ customProfileId }: PerfilPageProps) {
   const [editHabilidades, setEditHabilidades] = React.useState<string[]>([])
   const [novaHabilidade, setNovaHabilidade] = React.useState('')
 
+  // Recorte/zoom de foto
+  const [cropFile, setCropFile] = React.useState<File | null>(null)
+  const [showCropModal, setShowCropModal] = React.useState(false)
+
   // Carregar dados do perfil
   const loadProfile = React.useCallback(async () => {
     if (!profileId) return
@@ -115,7 +126,7 @@ export default function PerfilPage({ customProfileId }: PerfilPageProps) {
       setCelular(prof.celular || '')
       setAvatarUrl(prof.avatar_url || '')
       
-      const free = prof.freelancers?.[0]
+      const free = prof.freelancers
       setBio(free?.bio || '')
       setHabilidades(free?.habilidades || [])
 
@@ -259,31 +270,35 @@ export default function PerfilPage({ customProfileId }: PerfilPageProps) {
     }
   }
 
-  // Upload de Foto de Perfil para o Bucket
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Seleção de Foto — valida e abre o modal de recorte/zoom antes de enviar
+  const handlePhotoSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (!file || !profileId) return
+    e.target.value = '' // permite selecionar o mesmo arquivo novamente depois
+    if (!file || !profileId || profileId !== user?.id) return
 
+    if (!AVATAR_ALLOWED_TYPES.includes(file.type)) {
+      showToast('Formato inválido. Envie uma imagem JPG, PNG ou WEBP.', 'error')
+      return
+    }
+    if (file.size > AVATAR_MAX_SIZE_BYTES) {
+      showToast('A imagem deve ter no máximo 5MB.', 'error')
+      return
+    }
+
+    setCropFile(file)
+    setShowCropModal(true)
+  }
+
+  // Confirmação do recorte — envia a imagem já ajustada para o bucket
+  const handleCropConfirm = async (croppedFile: File) => {
+    if (!profileId) return
     try {
       setSaving(true)
-      
-      const fileExt = file.name.split('.').pop()
-      const fileName = `${profileId}-${Date.now()}.${fileExt}`
-      const filePath = `${fileName}`
 
-      // Fazer upload para o bucket 'avatars'
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(filePath, file, { cacheControl: '3600', upsert: true })
+      // uploadAvatar salva em `{userId}/logo.{ext}` — path exigido pela RLS
+      // do bucket (storage.foldername(name))[1] = auth.uid()
+      const publicUrl = await uploadAvatar(profileId, croppedFile)
 
-      if (uploadError) throw uploadError
-
-      // Obter URL pública
-      const { data: { publicUrl } } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(filePath)
-
-      // Atualizar no profiles
       const { error: updateProfileError } = await supabase
         .from('profiles')
         .update({ avatar_url: publicUrl })
@@ -291,12 +306,36 @@ export default function PerfilPage({ customProfileId }: PerfilPageProps) {
 
       if (updateProfileError) throw updateProfileError
 
-      setAvatarUrl(publicUrl)
+      // cache-bust: o path é fixo (upsert), então o browser precisa ser forçado a recarregar
+      setAvatarUrl(`${publicUrl}?t=${Date.now()}`)
       showToast('Foto de perfil atualizada!', 'success')
+      setShowCropModal(false)
+      setCropFile(null)
     } catch (err: any) {
       const msg = err?.message || err?.details || (typeof err === 'object' ? JSON.stringify(err) : String(err))
       console.error('Erro detalhado no upload da foto:', err)
-      showToast(`Erro no upload da imagem: ${msg}. Verifique se o bucket "avatars" existe no Supabase.`, 'error')
+      showToast(`Erro no upload da imagem: ${msg}`, 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleRemovePhoto = async () => {
+    if (!profileId || profileId !== user?.id) return
+    try {
+      setSaving(true)
+      const { error } = await supabase
+        .from('profiles')
+        .update({ avatar_url: null })
+        .eq('id', profileId)
+
+      if (error) throw error
+
+      setAvatarUrl('')
+      showToast('Foto de perfil removida.', 'success')
+    } catch (err: any) {
+      const msg = err?.message || String(err)
+      showToast(`Erro ao remover foto: ${msg}`, 'error')
     } finally {
       setSaving(false)
     }
@@ -530,17 +569,39 @@ export default function PerfilPage({ customProfileId }: PerfilPageProps) {
                     <input
                       id="avatar-upload"
                       type="file"
-                      accept="image/*"
-                      onChange={handlePhotoUpload}
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={handlePhotoSelected}
                       disabled={saving}
                       className="hidden"
                     />
                   </label>
                 </div>
+                {avatarUrl && (
+                  <button
+                    type="button"
+                    onClick={handleRemovePhoto}
+                    disabled={saving}
+                    className="flex items-center gap-1.5 text-[12px] font-semibold text-qe-error hover:underline disabled:opacity-40"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Remover foto
+                  </button>
+                )}
                 <p className="text-[11px] text-qe-gray-400 font-medium text-center">
-                  Recomendado: imagem quadrada de até 5MB.
+                  JPG, PNG ou WEBP de até 5MB — você poderá ajustar o enquadramento antes de salvar.
                 </p>
               </div>
+
+              <AvatarCropModal
+                open={showCropModal}
+                file={cropFile}
+                loading={saving}
+                onClose={() => {
+                  setShowCropModal(false)
+                  setCropFile(null)
+                }}
+                onConfirm={handleCropConfirm}
+              />
 
               {/* Campos Básicos */}
               <div className="bg-white border border-qe-gray-200 rounded-qe-md p-5 space-y-4 shadow-qe-sm">
@@ -579,12 +640,16 @@ export default function PerfilPage({ customProfileId }: PerfilPageProps) {
                 <h3 className="text-[13px] font-bold text-qe-gray-955 uppercase tracking-[0.5px]">Resumo Profissional (Bio)</h3>
                 <textarea
                   value={editBio}
-                  onChange={(e) => setEditBio(e.target.value)}
+                  onChange={(e) => setEditBio(e.target.value.slice(0, BIO_MAX_LENGTH))}
                   disabled={saving}
                   rows={5}
+                  maxLength={BIO_MAX_LENGTH}
                   className="w-full border border-qe-gray-200 rounded-qe-sm p-3 text-[14px] focus:outline-none focus:border-qe-yellow transition-colors resize-none leading-relaxed"
                   placeholder="Descreva suas experiências, cursos e o que você busca nos trabalhos extras..."
                 />
+                <p className="text-[11px] text-qe-gray-400 text-right font-medium">
+                  {editBio.length}/{BIO_MAX_LENGTH} caracteres
+                </p>
               </div>
 
               {/* Especialidades */}

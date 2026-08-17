@@ -52,3 +52,6 @@ export type { SidebarProps, SidebarItem } from './Sidebar'
 
 export { Select } from './Select'
 export type { SelectProps, SelectOption } from './Select'
+
+export { AvatarCropModal } from './AvatarCropModal'
+export type { AvatarCropModalProps } from './AvatarCropModal'

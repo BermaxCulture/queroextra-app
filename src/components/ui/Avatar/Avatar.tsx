@@ -30,7 +30,7 @@ export const Avatar: React.FC<AvatarProps> = ({
   const [imgError, setImgError] = React.useState(false)
 
   return (
-    <span className={['relative inline-flex', className].filter(Boolean).join(' ')}>
+    <span className={['relative inline-flex rounded-full', className].filter(Boolean).join(' ')}>
       <span
         className={[
           s.outer,

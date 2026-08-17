@@ -1,7 +1,7 @@
 import * as React from 'react'
 import type { ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Building2, LogOut } from 'lucide-react'
+import { LayoutDashboard, Building2, LogOut, Wallet } from 'lucide-react'
 import { Sidebar, ResponsiveSheet, Button } from '@/components/ui'
 import type { SidebarItem } from '@/components/ui'
 import { useAuth } from '@/contexts/AuthContext'
@@ -9,6 +9,7 @@ import { useAuth } from '@/contexts/AuthContext'
 const adminItems: SidebarItem[] = [
   { value: '/admin', label: 'Painel', icon: <LayoutDashboard size={20} /> },
   { value: '/admin/empresas-pendentes', label: 'Validar Empresas', icon: <Building2 size={20} /> },
+  { value: '/admin/pagamentos', label: 'Pagamentos', icon: <Wallet size={20} /> },
 ]
 
 const adminHeader = (

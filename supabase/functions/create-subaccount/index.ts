@@ -109,12 +109,20 @@ Deno.serve(async (req) => {
     }).eq('id', freelancer.id)
 
     // Cria proposta de subconta PF na Valida Pay
+    // QUER-68: a Valida Pay não assina o payload do webhook (sem HMAC/authToken
+    // por proposta — ver docs/validaPay-guide.md), então usamos um segredo
+    // compartilhado na própria URL como mitigação. Só é aplicado se
+    // VALIDAPAY_WEBHOOK_SECRET estiver configurado (ver validapay-webhook/index.ts).
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const webhookUrl = `${supabaseUrl}/functions/v1/validapay-webhook`
+    const webhookSecret = Deno.env.get('VALIDAPAY_WEBHOOK_SECRET')
+    const webhookUrl = webhookSecret
+      ? `${supabaseUrl}/functions/v1/validapay-webhook?secret=${encodeURIComponent(webhookSecret)}`
+      : `${supabaseUrl}/functions/v1/validapay-webhook`
 
-    // Converte DD-MM-YYYY → YYYY-MM-DD (formato exigido pela Valida Pay)
-    const [dd, mm, yyyy] = data_nascimento.split('-')
-    const birthDateISO = `${yyyy}-${mm}-${dd}`
+    // A Valida Pay exige o formato DD-MM-YYYY — data_nascimento já vem nesse
+    // formato do frontend (regex \d{2}-\d{2}-\d{4}), não precisa converter.
+    // (Antes convertia pra YYYY-MM-DD por engano — a API rejeitava com
+    // "O campo birthDate é obrigatório e deve ser no formato (DD-MM-YYYY)".)
 
     // Mapeia códigos internos para valores reais (API Valida Pay exige valores decimais e texto livre)
     const RENDA_MAP: Record<string, string> = {
@@ -146,7 +154,7 @@ Deno.serve(async (req) => {
         email: profile.email,
         fullName: profile.nome,
         socialName: '',
-        birthDate: birthDateISO,
+        birthDate: data_nascimento,
         motherName: nome_mae,
         isPoliticallyExposedPerson: pessoa_politicamente_exposta ?? false,
         address: {
@@ -185,8 +193,15 @@ Deno.serve(async (req) => {
       return json({ error: 'Resposta inválida da ValidaPay: formId ausente' }, 502)
     }
 
-    // Busca URL de KYC — em propostas UNFINISHED a API ainda retorna proposalStatus
-    // como objeto com urlDocumentscopy; tenta múltiplos paths por segurança
+    // proposalId é diferente de formId (ver doc "Subcontas ValidaPay" e
+    // "Eventos de Onboarding") — os webhooks de onboarding.backgroundcheck/
+    // documentscopy/proposal referenciam data.proposalId, não formId.
+    // Guardamos os dois pra o webhook conseguir casar o evento certo.
+    const proposalId: string | null =
+      proposal.proposalId ?? proposal.data?.proposalId ?? null
+
+    // Busca URL de KYC — em propostas PENDING a API ainda retorna o status
+    // como objeto com a url; tenta múltiplos paths por segurança
     let urlDocumentscopy: string | null = null
     try {
       const statusRes = await validaPayFetch(`/v1/proposals/${proposal.formId}`)
@@ -194,6 +209,7 @@ Deno.serve(async (req) => {
         const statusData = await statusRes.json()
         console.log('[create-subaccount] GET proposal:', JSON.stringify(statusData))
         urlDocumentscopy =
+          statusData?.data?.url ??
           statusData?.proposalStatus?.urlDocumentscopy ??
           statusData?.urlDocumentscopy ??
           statusData?.data?.urlDocumentscopy ??
@@ -205,10 +221,11 @@ Deno.serve(async (req) => {
 
     await supabase.from('freelancers').update({
       validapay_form_id: proposal.formId,
+      validapay_proposal_id: proposalId,
       validapay_url_documentscopy: urlDocumentscopy,
     }).eq('id', freelancer.id)
 
-    return json({ ok: true, formId: proposal.formId, urlDocumentscopy })
+    return json({ ok: true, formId: proposal.formId, proposalId, urlDocumentscopy })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido'
     console.error('[create-subaccount] Erro:', message)

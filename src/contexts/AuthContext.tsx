@@ -18,6 +18,7 @@ export interface Company {
   area: string | null
   documento_url: string[] | null
   status: 'pendente' | 'aprovado' | 'rejeitado' | 'bloqueado'
+  is_test_account: boolean
 }
 
 export interface Freelancer {
@@ -25,9 +26,11 @@ export interface Freelancer {
   profile_id: string
   cpf: string | null
   habilidades: string[] | null
-  validapay_onboarding_status: 'em_analise' | 'aprovado' | null
+  validapay_onboarding_status: 'em_analise' | 'aprovado' | 'rejeitado' | null
   validapay_form_id: string | null
   validapay_url_documentscopy: string | null
+  validapay_documents_received_at: string | null
+  validapay_approval_seen_at: string | null
   validapay_account_number: string | null
   pix_key: string | null
   pix_key_type: 'cpf' | 'telefone' | 'email' | 'chave_aleatoria' | null

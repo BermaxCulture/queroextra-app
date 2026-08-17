@@ -5,6 +5,7 @@ import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
   Avatar,
+  AvatarCropModal,
   Button,
   Input,
   Select,
@@ -13,13 +14,17 @@ import {
 } from '@/components/ui'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
+import { uploadAvatar } from '@/services/storage/uploadFile'
 import {
   cnpjCpfLabel,
   formatCnpjCpf,
   isValidCnpjCpf,
   stripCnpjCpf,
 } from '@/lib/validators/cnpjCpf'
-import { Building2, Mail, FileText, LogOut, Eye, Pencil, Lock, EyeOff } from 'lucide-react'
+import { Building2, Mail, FileText, LogOut, Eye, Pencil, Lock, EyeOff, ShieldOff, Camera, Trash2 } from 'lucide-react'
+
+const AVATAR_MAX_SIZE_BYTES = 5 * 1024 * 1024 // 5MB
+const AVATAR_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp']
 
 // ── Schemas ──────────────────────────────────────────────────────────────────
 
@@ -64,6 +69,11 @@ export default function EmpresaPerfil() {
   const [saving, setSaving] = React.useState(false)
   const [savingPass, setSavingPass] = React.useState(false)
   const [loggingOut, setLoggingOut] = React.useState(false)
+  const [uploadingPhoto, setUploadingPhoto] = React.useState(false)
+
+  // Recorte/zoom de foto
+  const [cropFile, setCropFile] = React.useState<File | null>(null)
+  const [showCropModal, setShowCropModal] = React.useState(false)
 
   // Password visibility
   const [showNew, setShowNew] = React.useState(false)
@@ -88,6 +98,7 @@ export default function EmpresaPerfil() {
   const [localCnpjCpf, setLocalCnpjCpf] = React.useState(
     company?.cnpj_cpf ? formatCnpjCpf(company.cnpj_cpf) : ''
   )
+  const [localAvatarUrl, setLocalAvatarUrl] = React.useState(profile?.avatar_url ?? '')
 
   // ── Edit form ──────────────────────────────────────────────────────────────
 
@@ -166,6 +177,72 @@ export default function EmpresaPerfil() {
     }
   }
 
+  // ── Foto de perfil ─────────────────────────────────────────────────────────
+
+  const handlePhotoSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = '' // permite selecionar o mesmo arquivo novamente depois
+    if (!file || !profile?.id) return
+
+    if (!AVATAR_ALLOWED_TYPES.includes(file.type)) {
+      showToast('Formato inválido. Envie uma imagem JPG, PNG ou WEBP.', 'error')
+      return
+    }
+    if (file.size > AVATAR_MAX_SIZE_BYTES) {
+      showToast('A imagem deve ter no máximo 5MB.', 'error')
+      return
+    }
+
+    setCropFile(file)
+    setShowCropModal(true)
+  }
+
+  const handleCropConfirm = async (croppedFile: File) => {
+    if (!profile?.id) return
+    try {
+      setUploadingPhoto(true)
+
+      const publicUrl = await uploadAvatar(profile.id, croppedFile)
+
+      const { error } = await supabase
+        .from('profiles')
+        .update({ avatar_url: publicUrl })
+        .eq('id', profile.id)
+
+      if (error) throw error
+
+      // cache-bust: o path é fixo (upsert), então o browser precisa ser forçado a recarregar
+      setLocalAvatarUrl(`${publicUrl}?t=${Date.now()}`)
+      showToast('Logo atualizada com sucesso!', 'success')
+      setShowCropModal(false)
+      setCropFile(null)
+    } catch (err: any) {
+      showToast(`Erro no upload da imagem: ${err?.message || 'Tente novamente.'}`, 'error')
+    } finally {
+      setUploadingPhoto(false)
+    }
+  }
+
+  const handleRemovePhoto = async () => {
+    if (!profile?.id) return
+    try {
+      setUploadingPhoto(true)
+      const { error } = await supabase
+        .from('profiles')
+        .update({ avatar_url: null })
+        .eq('id', profile.id)
+
+      if (error) throw error
+
+      setLocalAvatarUrl('')
+      showToast('Logo removida.', 'success')
+    } catch (err: any) {
+      showToast(`Erro ao remover logo: ${err?.message || 'Tente novamente.'}`, 'error')
+    } finally {
+      setUploadingPhoto(false)
+    }
+  }
+
   // ── Password form ──────────────────────────────────────────────────────────
 
   const {
@@ -219,20 +296,58 @@ export default function EmpresaPerfil() {
       <div className="bg-qe-white rounded-qe-md border border-qe-gray-200 p-6 md:p-8 space-y-6 shadow-qe-sm">
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-center gap-4 pb-6 border-b border-qe-gray-100">
-          <Avatar
-            src={profile?.avatar_url || undefined}
-            name={localNome || 'Empresa'}
-            size="lg"
-            verified={company?.status === 'aprovado'}
-          />
+          <div className="relative shrink-0">
+            <Avatar
+              src={localAvatarUrl || undefined}
+              name={localNome || 'Empresa'}
+              size="lg"
+              verified={company?.status === 'aprovado'}
+            />
+            <label
+              htmlFor="company-avatar-upload"
+              className="absolute bottom-0 left-0 w-7 h-7 bg-qe-yellow rounded-full border-2 border-white flex items-center justify-center cursor-pointer shadow-qe-md hover:bg-qe-yellow-text transition-colors"
+            >
+              <Camera className="w-3.5 h-3.5 text-qe-navy" />
+              <input
+                id="company-avatar-upload"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={handlePhotoSelected}
+                disabled={uploadingPhoto}
+                className="hidden"
+              />
+            </label>
+          </div>
           <div className="text-center sm:text-left">
             <h2 className="text-[20px] font-bold text-qe-gray-900">{localNome || 'Empresa Parceira'}</h2>
             <div className="flex items-center gap-1.5 justify-center sm:justify-start mt-1 text-[13px] text-qe-gray-400 font-medium">
               <Building2 size={14} />
               <span>{localArea || 'Segmento não informado'}</span>
             </div>
+            {localAvatarUrl && (
+              <button
+                type="button"
+                onClick={handleRemovePhoto}
+                disabled={uploadingPhoto}
+                className="flex items-center gap-1.5 text-[12px] font-semibold text-qe-error hover:underline disabled:opacity-40 mt-1.5 mx-auto sm:mx-0"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Remover logo
+              </button>
+            )}
           </div>
         </div>
+
+        <AvatarCropModal
+          open={showCropModal}
+          file={cropFile}
+          loading={uploadingPhoto}
+          onClose={() => {
+            setShowCropModal(false)
+            setCropFile(null)
+          }}
+          onConfirm={handleCropConfirm}
+        />
 
         {/* Read-only fields */}
         <div className="space-y-4">
@@ -264,45 +379,53 @@ export default function EmpresaPerfil() {
         </div>
 
         {/* Actions */}
-        <div className="pt-6 border-t border-qe-gray-100 flex flex-col sm:flex-row gap-3 justify-between">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <Button
-              variant="secondary"
-              size="md"
-              leadingIcon={<Pencil size={15} />}
-              onClick={() => setShowEditSheet(true)}
-            >
-              Editar Informações
-            </Button>
+        <div className="pt-6 border-t border-qe-gray-100 flex flex-col sm:flex-row sm:flex-wrap gap-3">
+          <Button
+            variant="secondary"
+            size="md"
+            leadingIcon={<Pencil size={15} />}
+            onClick={() => setShowEditSheet(true)}
+          >
+            Editar Informações
+          </Button>
 
+          <Button
+            variant="ghost"
+            size="md"
+            leadingIcon={<Lock size={15} />}
+            className="border border-qe-gray-200"
+            onClick={() => setShowPasswordSheet(true)}
+          >
+            Alterar Senha
+          </Button>
+
+          {company?.id && (
             <Button
               variant="ghost"
               size="md"
-              leadingIcon={<Lock size={15} />}
+              leadingIcon={<Eye size={15} />}
               className="border border-qe-gray-200"
-              onClick={() => setShowPasswordSheet(true)}
+              onClick={() => navigate('/empresa/perfil-publico')}
             >
-              Alterar Senha
+              Prévia pública
             </Button>
+          )}
 
-            {company?.id && (
-              <Button
-                variant="ghost"
-                size="md"
-                leadingIcon={<Eye size={15} />}
-                className="border border-qe-gray-200"
-                onClick={() => navigate('/empresa/perfil-publico')}
-              >
-                Prévia pública
-              </Button>
-            )}
-          </div>
+          <Button
+            variant="ghost"
+            size="md"
+            leadingIcon={<ShieldOff size={15} />}
+            className="border border-qe-gray-200"
+            onClick={() => navigate('/empresa/prestadores-bloqueados')}
+          >
+            Prestadores bloqueados
+          </Button>
 
           <Button
             variant="ghost"
             size="md"
             leadingIcon={<LogOut size={15} />}
-            className="text-red-600 hover:bg-qe-error-bg border-none"
+            className="text-red-600 hover:bg-qe-error-bg border-none sm:ml-auto"
             onClick={() => setShowLogoutSheet(true)}
           >
             Encerrar Sessão
