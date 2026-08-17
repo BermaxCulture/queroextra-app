@@ -74,12 +74,14 @@ Deno.serve(async (req) => {
 
     const applicationIds = applications.map(app => app.id)
 
-    // Buscar transações com status liberado
+    // Buscar transações com status liberado — mais antigas primeiro, pois
+    // vamos consumi-las em ordem (FIFO) pra cobrir o valor solicitado.
     const { data: transactions } = await supabase
       .from('transactions')
       .select('id, valor_liquido')
       .in('application_id', applicationIds)
       .eq('status', 'liberado')
+      .order('created_at', { ascending: true })
 
     if (!transactions || transactions.length === 0) {
       return json({ error: 'Saldo disponível para saque é zero' }, 422)
@@ -100,9 +102,47 @@ Deno.serve(async (req) => {
       return json({ error: 'O valor solicitado é maior que o saldo disponível' }, 422)
     }
 
-    const totalAmount = Math.min(requestedAmount, totalAvailable)
+    // Cada transação representa o pagamento de um turno específico — não dá
+    // pra sacar "metade" de uma. Consome transações inteiras (mais antigas
+    // primeiro) até cobrir o valor pedido; o total final pode ficar um pouco
+    // acima do solicitado se não bater exatamente com a soma disponível, mas
+    // nunca fica abaixo, e a ValidaPay só recebe o valor das transações que
+    // de fato vamos marcar como sacadas — sem essa correspondência exata,
+    // um saque parcial acabava marcando TODAS as transações liberadas como
+    // sacadas mesmo transferindo só uma fração do valor.
+    const selected: typeof transactions = []
+    let totalAmount = 0
+    for (const tx of transactions) {
+      if (totalAmount >= requestedAmount) break
+      selected.push(tx)
+      totalAmount += Number(tx.valor_liquido)
+    }
+    const transactionIds = selected.map(tx => tx.id)
 
     console.log(`[request-withdrawal] Solicitando saque de R$${totalAmount} para PIX ${freelancer.pix_key} (conta ${freelancer.validapay_account_number})`)
+
+    // Reserva as transações ANTES de chamar a ValidaPay — só transiciona
+    // quem ainda estiver 'liberado'. É uma trava otimista: se duas
+    // solicitações concorrentes (duplo clique, retry de rede) tentarem
+    // sacar o mesmo saldo, só uma consegue reservar todas as linhas: a
+    // outra vê `reserved.length` menor que o esperado e aborta sem chamar
+    // a ValidaPay, evitando saque duplicado do mesmo dinheiro.
+    const { data: reserved, error: reserveError } = await supabase
+      .from('transactions')
+      .update({ status: 'sacado' })
+      .in('id', transactionIds)
+      .eq('status', 'liberado')
+      .select('id')
+
+    if (reserveError || !reserved || reserved.length !== transactionIds.length) {
+      // Reverte o que conseguiu reservar (caso parcial) — não deixa nada
+      // preso em 'sacado' sem ter de fato chamado a ValidaPay.
+      if (reserved && reserved.length > 0) {
+        await supabase.from('transactions').update({ status: 'liberado' }).in('id', reserved.map(r => r.id))
+      }
+      console.error('[request-withdrawal] Corrida detectada ao reservar transações para saque:', reserveError)
+      return json({ error: 'Seu saldo mudou nesse instante — tente novamente' }, 409)
+    }
 
     // Mapeia pixKeyType interno para o formato exigido pela Valida Pay (maiúsculo/inglês)
     const PIX_TYPE_MAP: Record<string, string> = {
@@ -125,25 +165,20 @@ Deno.serve(async (req) => {
     if (!res.ok) {
       const errText = await res.text()
       console.error('[request-withdrawal] ValidaPay error:', errText)
+      // O saque real nunca aconteceu — reverte a reserva pra 'liberado' pra
+      // não deixar o freelancer sem acesso a um dinheiro que não foi pago.
+      await supabase.from('transactions').update({ status: 'liberado' }).in('id', transactionIds)
       return json({ error: `Erro ao solicitar saque na instituição parceira.` }, 502)
     }
 
     const withdrawalData = await res.json()
 
-    // Atualiza as transações para 'sacado' no banco de dados local
-    const transactionIds = transactions.map(tx => tx.id)
-    const { error: txError } = await supabase
-      .from('transactions')
-      .update({ status: 'sacado' })
-      .in('id', transactionIds)
-
-    if (txError) {
-      console.error('[request-withdrawal] Erro crítico ao atualizar status das transações:', txError)
-      // Idealmente enviar um alerta de consistência
-    }
-
-    return json({ 
-      success: true, 
+    // As transações já foram marcadas 'sacado' na reserva acima — nada mais
+    // a atualizar aqui, o que elimina a janela em que o saque real já tinha
+    // sido efetuado mas o banco local ainda achava o saldo 'liberado'
+    // (permitindo saque duplicado do mesmo dinheiro).
+    return json({
+      success: true,
       message: 'Saque solicitado com sucesso!',
       withdrawalId: withdrawalData.withdrawalId,
       amount: totalAmount

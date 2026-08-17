@@ -10,6 +10,7 @@ import LandingPage from '@/pages/LandingPage'
 import ParaFreelancers from '@/pages/ParaFreelancers'
 import ParaEmpresas from '@/pages/ParaEmpresas'
 import LoginPage from '@/pages/auth/LoginPage'
+import RedefinirSenhaPage from '@/pages/auth/RedefinirSenhaPage'
 import CadastroPage from '@/pages/auth/CadastroPage'
 import CadastroEmpresaEtapa1Page from '@/pages/auth/CadastroEmpresaEtapa1Page'
 import VerificarEmailPage from '@/pages/auth/VerificarEmailPage'
@@ -27,6 +28,7 @@ import ExtrasHome from '@/pages/extras/ExtrasHome'
 import AdminDashboard from '@/pages/admin/AdminDashboard'
 import AdminLoginPage from '@/pages/admin/AdminLoginPage'
 import ValidarEmpresas from '@/pages/admin/ValidarEmpresas'
+import PagamentosConfigPage from '@/pages/admin/PagamentosConfigPage'
 import AdminLayout from '@/pages/admin/AdminLayout'
 
 function ScrollToTop() {
@@ -53,6 +55,9 @@ function App() {
             
             {/* Login e Cadastro protegidos para convidados apenas */}
             <Route path="/login" element={<GuestRoute><LoginPage /></GuestRoute>} />
+            {/* Sem GuestRoute: a etapa de código já autentica o usuário (sessão de
+                recovery) antes de ele trocar a senha — GuestRoute o expulsaria daqui. */}
+            <Route path="/redefinir-senha" element={<RedefinirSenhaPage />} />
             <Route path="/cadastro" element={<GuestRoute><CadastroPage /></GuestRoute>} />
             <Route path="/cadastro/empresa" element={<GuestRoute><CadastroEmpresaEtapa1Page /></GuestRoute>} />
             <Route path="/verificar-email" element={<VerificarEmailPage />} />
@@ -118,6 +123,16 @@ function App() {
                 <ProtectedRoute allowedRole="admin" loginPath="/admin/login">
                   <AdminLayout>
                     <ValidarEmpresas />
+                  </AdminLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/pagamentos"
+              element={
+                <ProtectedRoute allowedRole="admin" loginPath="/admin/login">
+                  <AdminLayout>
+                    <PagamentosConfigPage />
                   </AdminLayout>
                 </ProtectedRoute>
               }

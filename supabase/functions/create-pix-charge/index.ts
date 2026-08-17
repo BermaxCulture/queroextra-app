@@ -33,7 +33,7 @@ Deno.serve(async (req) => {
     // V-03: Somente empresas podem gerar cobranças
     const { data: profile } = await supabase
       .from('profiles')
-      .select('tipo')
+      .select('tipo, email, celular')
       .eq('id', user.id)
       .single()
 
@@ -44,25 +44,69 @@ Deno.serve(async (req) => {
     // V-04: Busca a empresa vinculada ao usuário autenticado
     const { data: company } = await supabase
       .from('companies')
-      .select('id')
+      .select('id, is_test_account, cnpj_cpf')
       .eq('profile_id', user.id)
       .single()
 
     if (!company) return json({ error: 'Empresa não encontrada' }, 404)
 
+    // A ValidaPay exige o objeto `customer` (documentNumber/e-mail no mínimo)
+    // apesar da doc marcar o campo como opcional — sem ele a cobrança falha
+    // com 400 antes de gerar o PIX. CNPJ/CPF e e-mail são obrigatórios no
+    // cadastro da empresa antes de gerar uma cobrança.
+    if (!company.cnpj_cpf || !profile.email) {
+      return json({ error: 'Complete o cadastro da empresa (CNPJ/CPF e e-mail) antes de gerar uma cobrança' }, 422)
+    }
+
     const { application_id } = await req.json()
     if (!application_id) return json({ error: 'application_id é obrigatório' }, 400)
 
-    // V-02: Idempotência — bloqueia double spend
+    // V-02: Idempotência — bloqueia double spend, mas sem travar o usuário
+    // pra sempre. 'retido' significa que já foi paga de verdade: bloqueia.
+    // 'pendente' pode ser uma cobrança abandonada (empresa fechou o modal
+    // sem pagar) — consulta o status ao vivo na ValidaPay antes de decidir:
+    // ainda pagável reaproveita o mesmo QR; expirada/cancelada libera pra
+    // gerar uma nova.
     const { data: existing } = await supabase
       .from('transactions')
-      .select('id, status')
+      .select('id, status, gateway_charge_id, emv')
       .eq('application_id', application_id)
       .in('status', ['pendente', 'retido'])
       .maybeSingle()
 
     if (existing) {
-      return json({ error: 'Já existe uma cobrança ativa para esta candidatura', code: 'CHARGE_EXISTS' }, 409)
+      if (existing.status === 'retido') {
+        return json({ error: 'Esta candidatura já foi paga', code: 'CHARGE_EXISTS' }, 409)
+      }
+
+      if (existing.gateway_charge_id) {
+        const liveRes = await validaPayFetch(`/v1/charges/${existing.gateway_charge_id}`)
+        if (liveRes.ok) {
+          const liveData = await liveRes.json()
+
+          if (liveData.status === 'PAID') {
+            // Já foi paga na ValidaPay mas o webhook/polling ainda não
+            // refletiu isso no nosso banco — devolve o mesmo charge pro
+            // frontend detectar o pagamento na próxima consulta de status.
+            return json({ chargeId: existing.gateway_charge_id, emv: existing.emv })
+          }
+
+          if (liveData.status === 'PENDING' && existing.emv) {
+            // Ainda pagável — reaproveita o QR já gerado em vez de criar
+            // outra cobrança live pro mesmo turno.
+            return json({ chargeId: existing.gateway_charge_id, emv: existing.emv })
+          }
+
+          // EXPIRED/CANCELLED (ou emv ausente de um registro antigo) —
+          // encerra a cobrança antiga e segue pra gerar uma nova.
+          await supabase.from('transactions').update({ status: 'estornado' }).eq('id', existing.id)
+        } else {
+          console.error('[create-pix-charge] Falha ao consultar status ao vivo da cobrança existente:', await liveRes.text())
+          return json({ error: 'Já existe uma cobrança ativa para esta candidatura', code: 'CHARGE_EXISTS' }, 409)
+        }
+      } else {
+        await supabase.from('transactions').update({ status: 'estornado' }).eq('id', existing.id)
+      }
     }
 
     // Busca candidatura com vaga e freelancer
@@ -91,27 +135,46 @@ Deno.serve(async (req) => {
       return json({ error: 'Freelancer não possui conta Valida Pay aprovada' }, 422)
     }
 
-    const valorBruto = Number(job.valor)
-    const taxaPlataforma = 10.0
-    const valorLiquido = valorBruto - taxaPlataforma
+    // A taxa fixa da plataforma é somada EM CIMA do valor da vaga: a empresa
+    // paga valorVaga + taxaPlataforma, e o freelancer recebe o valor da vaga
+    // cheio via split (a taxa não sai do freelancer). Empresas de teste
+    // (companies.is_test_account) têm a taxa zerada — usam vagas de valor
+    // baixo de verdade pra testar sem custo real pra plataforma.
+    const valorVaga = Number(job.valor)
+    const taxaPlataforma = company.is_test_account ? 0 : 10.0
+    const valorCobranca = valorVaga + taxaPlataforma
 
-    if (valorLiquido <= 0) {
-      return json({ error: 'Valor da vaga é menor ou igual à taxa da plataforma' }, 422)
+    if (valorVaga <= 0) {
+      return json({ error: 'Valor da vaga inválido' }, 422)
     }
 
-    // NC-05: Endpoint correto — POST /v1/charges com paymentMethod: 'pix'
-    // NC-06: Campo title obrigatório adicionado
-    const res = await validaPayFetch('/v1/charges', {
+    // customer.name NÃO é enviado de propósito: incluir `name` faz a ValidaPay
+    // tratar a cobrança como COBV (vencimento), que passa a exigir também
+    // `cep` do customer + `expiration` — e a maioria das empresas não tem CEP
+    // cadastrado. Sem `name`, a cobrança fica no modo "imediato" simples e
+    // documentNumber + email já bastam (confirmado testando a API real).
+    const customer: Record<string, string> = {
+      documentNumber: company.cnpj_cpf.replace(/\D/g, ''),
+      email: profile.email,
+    }
+    if (profile.celular) customer.phone = formatPhone(profile.celular)
+
+    // Endpoint dedicado de "cobrança imediata com split": cria o QR Code na
+    // conta master da plataforma e faz o split pra conta ValidaPay do
+    // freelancer. O endpoint genérico /v1/charges aceitava accountNumber de
+    // split inválido sem erro nenhum (split silenciosamente não aplicado);
+    // este valida de verdade e rejeita split pra conta inexistente.
+    const res = await validaPayFetch('/v1/charges/pix', {
       method: 'POST',
       body: JSON.stringify({
-        paymentMethod: 'pix',
-        amount: valorBruto,
+        amount: valorCobranca,
         title: `Pagamento - ${job.titulo}`,
+        customer,
         split: [
           {
             type: 'fixed',
             accountNumber: freelancer.validapay_account_number,
-            amount: valorLiquido,
+            amount: valorVaga,
           },
         ],
         metadata: {
@@ -129,26 +192,35 @@ Deno.serve(async (req) => {
     }
 
     const chargeData = await res.json()
+    const emv = chargeData.emv
 
-    // Salva a transação como pendente
+    if (!emv) {
+      console.error('[create-pix-charge] Resposta sem EMV:', JSON.stringify(chargeData))
+      return json({ error: 'ValidaPay não retornou o código PIX (emv)' }, 502)
+    }
+
+    // Salva a transação como pendente. valor_bruto = total cobrado da
+    // empresa; valor_liquido = o que o freelancer recebe (valor cheio da
+    // vaga); valor_bruto - taxa_plataforma = valor_liquido.
     const { error: txError } = await supabase
       .from('transactions')
       .insert({
         job_id: job.id,
         application_id,
-        valor_bruto: valorBruto,
+        valor_bruto: valorCobranca,
         taxa_plataforma: taxaPlataforma,
-        valor_liquido: valorLiquido,
+        valor_liquido: valorVaga,
         gateway_charge_id: chargeData.chargeId,
-        emv: chargeData.emv,
+        emv,
         status: 'pendente',
+        is_test: company.is_test_account === true,
       })
 
     if (txError) {
       console.error('[create-pix-charge] Erro ao salvar transação:', txError)
     }
 
-    return json({ chargeId: chargeData.chargeId, emv: chargeData.emv })
+    return json({ chargeId: chargeData.chargeId, emv })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido'
     console.error('[create-pix-charge] Erro:', message)
@@ -161,4 +233,10 @@ function json(data: unknown, status = 200): Response {
     status,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   })
+}
+
+function formatPhone(celular: string): string {
+  const digits = celular.replace(/\D/g, '')
+  if (digits.startsWith('55')) return `+${digits}`
+  return `+55${digits}`
 }

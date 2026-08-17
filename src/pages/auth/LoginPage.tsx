@@ -106,11 +106,10 @@ export default function LoginPage() {
     }
     
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
-      })
+      const { error } = await supabase.auth.resetPasswordForEmail(email)
       if (error) throw error
-      showToast('Verifique sua caixa de entrada para redefinir a senha.', 'success')
+      showToast('Enviamos um código de 6 dígitos para o seu e-mail.', 'success')
+      navigate(`/redefinir-senha?email=${encodeURIComponent(email)}`)
     } catch (error: any) {
       console.error('Erro detalhado ao enviar e-mail de recuperação:', error)
       showToast(`Não foi possível enviar o e-mail de recuperação: ${error?.message || String(error)}`, 'error')

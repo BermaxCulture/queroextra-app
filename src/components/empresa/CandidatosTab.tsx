@@ -30,11 +30,20 @@ import {
   Copy,
   QrCode,
   HelpCircle,
+  Ban,
 } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { ReviewModal } from '@/components/ReviewModal/ReviewModal'
 import { fetchPendingReviews } from '@/hooks/useReviews'
 import type { PendingReview } from '@/hooks/useReviews'
+
+// Taxa fixa da plataforma somada em cima do valor da vaga — precisa bater com
+// o valor usado em supabase/functions/create-pix-charge/index.ts.
+const TAXA_PLATAFORMA = 10.0
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
+}
 
 // ---------------------------------------------------------------------------
 // Tipos
@@ -183,7 +192,7 @@ export function CandidatosTab({
   hideJobInfo,
   tabParamName = 'status',
 }: CandidatosTabProps) {
-  const { company } = useAuth()
+  const { company, profile } = useAuth()
   const { showToast } = useToast()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -252,7 +261,7 @@ export function CandidatosTab({
   // Modais
   const [isApproveOpen, setIsApproveOpen] = React.useState(false)
   const [approveTarget, setApproveTarget] = React.useState<{
-    appId: string; nome: string; profileId: string
+    appId: string; nome: string; profileId: string; valorVaga: number
   } | null>(null)
 
   const [isRejectOpen, setIsRejectOpen] = React.useState(false)
@@ -260,22 +269,35 @@ export function CandidatosTab({
     appId: string; nome: string
   } | null>(null)
 
+  const [isBlockOpen, setIsBlockOpen] = React.useState(false)
+  const [blockTarget, setBlockTarget] = React.useState<{
+    freelancerId: string; nome: string
+  } | null>(null)
+  const [blockReason, setBlockReason] = React.useState('')
+
   // PIX State
   const [pixData, setPixData] = React.useState<{ chargeId: string; emv: string } | null>(null)
   const [pixStatus, setPixStatus] = React.useState<'PENDING' | 'PAID' | 'EXPIRED'>('PENDING')
   const [pollingTimeout, setPollingTimeout] = React.useState<ReturnType<typeof setTimeout> | null>(null)
+  const [realtimeChannel, setRealtimeChannel] = React.useState<ReturnType<typeof supabase.channel> | null>(null)
   const [simulatingPayment, setSimulatingPayment] = React.useState(false)
   const [revealedPhone, setRevealedPhone] = React.useState<string | null>(null)
 
-  // Limpa polling ao desmontar ou fechar
+  // Limpa polling/realtime ao desmontar ou fechar
   React.useEffect(() => {
-    if (!isApproveOpen && pollingTimeout) {
-      clearTimeout(pollingTimeout)
-      setPollingTimeout(null)
+    if (!isApproveOpen) {
+      if (pollingTimeout) {
+        clearTimeout(pollingTimeout)
+        setPollingTimeout(null)
+      }
+      if (realtimeChannel) {
+        supabase.removeChannel(realtimeChannel)
+        setRealtimeChannel(null)
+      }
       setPixData(null)
       setPixStatus('PENDING')
     }
-  }, [isApproveOpen, pollingTimeout])
+  }, [isApproveOpen, pollingTimeout, realtimeChannel])
 
   // Sheet Perfil
   const [isProfileOpen, setIsProfileOpen] = React.useState(false)
@@ -424,7 +446,7 @@ export function CandidatosTab({
           jobs!inner(titulo, categoria, valor, data_inicio, data_fim)
         `)
         .eq('freelancer_id', freelancerId)
-        .eq('status', 'aprovado')
+        .eq('status', 'concluido')
         .eq('jobs.status', 'finalizada')
         .order('created_at', { ascending: false })
 
@@ -456,16 +478,9 @@ export function CandidatosTab({
     try {
       setIsActionLoading(true)
 
-      // Sandbox: pula o PIX e simula o pagamento direto via edge function
-      if (IS_SANDBOX) {
-        const { data, error } = await supabase.functions.invoke('simulate-payment', {
-          body: { application_id: approveTarget.appId },
-        })
-        if (error || !data?.ok) throw new Error(data?.error || 'Erro ao simular pagamento')
-        await handlePaymentConfirmed(approveTarget.appId, approveTarget.profileId)
-        return
-      }
-
+      // Sempre gera a cobrança PIX real — a confirmação de pagamento (e a
+      // liberação do telefone) só acontece depois que o pagamento é
+      // verificado de verdade via startPixWatching (Realtime + poll de segurança).
       // 1. Gera a cobrança com split
       const { data: chargeData, error: chargeErr } = await supabase.functions.invoke(
         'create-pix-charge',
@@ -478,7 +493,7 @@ export function CandidatosTab({
 
       setPixData({ chargeId: chargeData.chargeId, emv: chargeData.emv })
       setPixStatus('PENDING')
-      startPixPolling(chargeData.chargeId, approveTarget.appId)
+      startPixWatching(chargeData.chargeId, approveTarget.appId)
 
     } catch (err: any) {
       console.error(err)
@@ -488,17 +503,55 @@ export function CandidatosTab({
     }
   }
 
-  const startPixPolling = (chargeId: string, appId: string) => {
+  // Evita tratar o pagamento duas vezes se o Realtime e o poll de segurança
+  // detectarem o PAID quase ao mesmo tempo (closures antigos podem não ver o
+  // pixStatus mais recente, por isso um ref em vez de state aqui).
+  const paidHandledRef = React.useRef(false)
+
+  const handlePixPaid = async (appId: string) => {
+    if (paidHandledRef.current) return
+    paidHandledRef.current = true
+
+    showToast('Pagamento confirmado! Candidato aprovado.', 'success')
+    const profileId = approveTarget?.profileId ?? ''
+    // Pagamento real: a notificação (e-mail + in-app) já foi disparada pelo
+    // backend (webhook ou get-charge-status, quem vencer a corrida) — não
+    // repete aqui pra não duplicar.
+    await handlePaymentConfirmed(appId, profileId, { skipNotify: true })
+  }
+
+  // Detecção principal: Realtime na linha da transação — o webhook da
+  // ValidaPay grava status 'retido' no banco assim que o pagamento é
+  // confirmado, e o Postgres Changes empurra isso pro frontend na hora, sem
+  // ficar batendo na API da ValidaPay a cada poll.
+  // Poll de segurança (bem mais espaçado, 30s): cobre o caso de o Realtime
+  // cair/desconectar, e também é quem detecta cobrança EXPIRADA — esse
+  // estado só existe na ValidaPay, nunca é escrito na nossa tabela.
+  const startPixWatching = (chargeId: string, appId: string) => {
+    paidHandledRef.current = false
+
+    const channel = supabase
+      .channel(`pix-charge-${chargeId}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'transactions', filter: `gateway_charge_id=eq.${chargeId}` },
+        (payload) => {
+          if ((payload.new as { status?: string })?.status === 'retido') {
+            handlePixPaid(appId)
+          }
+        }
+      )
+      .subscribe()
+    setRealtimeChannel(channel)
+
     const poll = async () => {
       try {
         const { data } = await supabase.functions.invoke('get-charge-status', {
           body: { chargeId }
         })
-        
+
         if (data?.status === 'PAID') {
-          showToast('Pagamento confirmado! Candidato aprovado.', 'success')
-          const profileId = approveTarget?.profileId ?? ''
-          await handlePaymentConfirmed(appId, profileId)
+          await handlePixPaid(appId)
           return
         }
 
@@ -507,16 +560,16 @@ export function CandidatosTab({
           showToast('A cobrança PIX expirou.', 'error')
           return
         }
-
-        // Continua polling se a aba estiver aberta
-        setPollingTimeout(setTimeout(poll, 5000))
       } catch (err) {
-        console.error('Erro no polling:', err)
-        setPollingTimeout(setTimeout(poll, 5000))
+        console.error('Erro no poll de segurança:', err)
+      }
+
+      if (!paidHandledRef.current) {
+        setPollingTimeout(setTimeout(poll, 30000))
       }
     }
-    
-    poll()
+
+    setPollingTimeout(setTimeout(poll, 30000))
   }
 
   const copyPix = () => {
@@ -526,9 +579,11 @@ export function CandidatosTab({
     }
   }
 
-  const handlePaymentConfirmed = async (appId: string, profileId: string) => {
+  const handlePaymentConfirmed = async (appId: string, profileId: string, options?: { skipNotify?: boolean }) => {
     setPixStatus('PAID')
-    await notify(appId, 'aprovado')
+    if (!options?.skipNotify) {
+      await notify(appId, 'aprovado')
+    }
 
     // Busca o celular do freelancer via RPC segura (mesmo mecanismo da aba aprovados)
     try {
@@ -548,11 +603,14 @@ export function CandidatosTab({
     setSimulatingPayment(true)
     try {
       const { data, error } = await supabase.functions.invoke('simulate-payment', {
-        body: { application_id: approveTarget.appId },
+        body: { chargeId: pixData.chargeId },
       })
       if (error) throw error
       if (!data?.ok) throw new Error(data?.error ?? 'Erro ao simular pagamento')
 
+      // Trava o ref pra o Realtime não reprocessar essa mesma escrita
+      // (simulate-payment também grava status 'retido' na transação).
+      paidHandledRef.current = true
       await handlePaymentConfirmed(approveTarget.appId, approveTarget.profileId)
       showToast('Pagamento simulado com sucesso! ✅', 'success')
     } catch (err: any) {
@@ -585,7 +643,7 @@ export function CandidatosTab({
   const triggerApprove = (app: Application) => {
     const f = app.freelancers?.profiles
     if (!f) return
-    setApproveTarget({ appId: app.id, nome: f.nome, profileId: f.id })
+    setApproveTarget({ appId: app.id, nome: f.nome, profileId: f.id, valorVaga: Number(app.jobs?.valor ?? 0) })
     setIsApproveOpen(true)
   }
 
@@ -600,6 +658,37 @@ export function CandidatosTab({
     setProfileTarget(app)
     setIsProfileOpen(true)
     if (app.freelancers?.id) fetchExperiences(app.freelancers.id)
+  }
+
+  const triggerBlock = (app: Application) => {
+    const f = app.freelancers?.profiles
+    if (!f || !app.freelancers?.id) return
+    setBlockTarget({ freelancerId: app.freelancers.id, nome: f.nome })
+    setBlockReason('')
+    setIsBlockOpen(true)
+  }
+
+  const handleBlockFreelancer = async () => {
+    if (!blockTarget || !company?.id) return
+    setIsActionLoading(true)
+    const { error } = await supabase.from('company_freelancer_blocks').insert({
+      company_id: company.id,
+      freelancer_id: blockTarget.freelancerId,
+      reason: blockReason.trim() || null,
+      created_by: profile?.id,
+    })
+
+    if (error) {
+      showToast(
+        error.code === '23505' ? 'Este prestador já está bloqueado.' : 'Erro ao bloquear prestador.',
+        'error'
+      )
+    } else {
+      showToast(`${blockTarget.nome} não verá mais suas vagas.`, 'success')
+      setIsBlockOpen(false)
+      setBlockTarget(null)
+    }
+    setIsActionLoading(false)
   }
 
   // -------------------------------------------------------------------------
@@ -722,6 +811,16 @@ export function CandidatosTab({
                         aria-label="Ver perfil"
                       >
                         <Eye size={16} />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => triggerBlock(app)}
+                        aria-label="Bloquear prestador"
+                        title="Bloquear prestador para suas vagas"
+                        className="p-2 rounded-full text-qe-gray-400 hover:bg-qe-error-bg hover:text-qe-error transition-colors"
+                      >
+                        <Ban size={16} />
                       </button>
 
                       {activeTab === 'pendente' && (
@@ -932,6 +1031,22 @@ export function CandidatosTab({
                 Deseja confirmar a contratação de{' '}
                 <strong className="text-qe-gray-900">{approveTarget?.nome}</strong>?
               </p>
+              {!pixData && approveTarget && (
+                <div className="p-3 bg-qe-yellow-bg border border-qe-yellow/30 rounded-qe-sm text-[13px] text-qe-gray-700 space-y-1">
+                  <div className="flex justify-between">
+                    <span>Valor do turno</span>
+                    <span>{formatCurrency(approveTarget.valorVaga)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Taxa fixa QueroExtra</span>
+                    <span>{formatCurrency(TAXA_PLATAFORMA)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold text-qe-gray-900 pt-1 border-t border-qe-yellow/30">
+                    <span>Total do PIX</span>
+                    <span>{formatCurrency(approveTarget.valorVaga + TAXA_PLATAFORMA)}</span>
+                  </div>
+                </div>
+              )}
               <div className="flex items-center gap-2 p-3 bg-qe-gray-50 border border-qe-gray-100 rounded-qe-sm text-[13px] text-qe-gray-500">
                 <Phone size={13} className="text-qe-yellow-text shrink-0" />
                 <span>O número de contato será liberado após o pagamento do PIX</span>
@@ -1000,6 +1115,43 @@ export function CandidatosTab({
             </Button>
             <Button variant="danger" size="sm" onClick={handleReject} loading={isActionLoading}>
               Recusar Candidato
+            </Button>
+          </div>
+        </div>
+      </ResponsiveSheet>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Modal: Bloquear Prestador                                           */}
+      {/* ------------------------------------------------------------------ */}
+      <ResponsiveSheet
+        open={isBlockOpen}
+        onClose={() => !isActionLoading && setIsBlockOpen(false)}
+        title="Bloquear Prestador"
+      >
+        <div className="p-6 space-y-5">
+          <p className="text-[14px] text-qe-gray-700">
+            <strong className="text-qe-gray-900">{blockTarget?.nome}</strong> não vai mais ver nem
+            conseguir se candidatar às vagas da sua empresa. O prestador não é avisado do
+            bloqueio e mantém acesso normal ao restante da plataforma.
+          </p>
+          <div className="space-y-1.5">
+            <label className="text-[13px] font-semibold text-qe-gray-700">
+              Motivo (opcional, uso interno)
+            </label>
+            <textarea
+              value={blockReason}
+              onChange={(e) => setBlockReason(e.target.value)}
+              rows={3}
+              className="w-full border border-qe-gray-200 rounded-qe-sm px-3 py-2 text-[14px] text-qe-gray-900 resize-none focus:outline-none focus:border-qe-yellow"
+              placeholder="Ex: não compareceu ao turno combinado..."
+            />
+          </div>
+          <div className="flex items-center gap-3 justify-end pt-3 border-t border-qe-gray-100">
+            <Button variant="ghost" size="sm" onClick={() => setIsBlockOpen(false)} disabled={isActionLoading}>
+              Cancelar
+            </Button>
+            <Button variant="danger" size="sm" onClick={handleBlockFreelancer} loading={isActionLoading}>
+              Bloquear Prestador
             </Button>
           </div>
         </div>

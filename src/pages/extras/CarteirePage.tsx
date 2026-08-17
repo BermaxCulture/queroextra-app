@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { TopBar, Button, BottomSheet, Input, Select, useToast, EmptyState } from '@/components/ui'
+import { TopBar, Button, ResponsiveSheet, Input, Select, useToast, EmptyState } from '@/components/ui'
 import {
   Wallet, Clock, CheckCircle, Settings, Landmark, History,
   ArrowDownToLine, ArrowUpRight, Info, AlertCircle,
@@ -11,7 +11,7 @@ import { supabase } from '@/lib/supabase'
 type Transaction = {
   id: string
   valor_liquido: number
-  status: 'pendente' | 'retido' | 'liberado' | 'sacado'
+  status: 'pendente' | 'retido' | 'liberado' | 'sacado' | 'estornado'
   created_at: string
   jobs?: { titulo: string }
 }
@@ -115,7 +115,7 @@ export function CarteirePage() {
 
   const [freelancerId, setFreelancerId] = useState<string | null>(null)
   const [pixKey, setPixKey] = useState('')
-  const [pixKeyType, setPixKeyType] = useState('CPF')
+  const [pixKeyType, setPixKeyType] = useState('cpf')
 
   // Saque — valor escolhido
   const [withdrawAmount, setWithdrawAmount] = useState('')
@@ -144,7 +144,7 @@ export function CarteirePage() {
       setFreelancerId(freelancerData.id)
       if (freelancerData.pix_key) {
         setPixKey(freelancerData.pix_key)
-        setPixKeyType(freelancerData.pix_key_type || 'CPF')
+        setPixKeyType(freelancerData.pix_key_type || 'cpf')
       }
 
       const { data: applications } = await supabase
@@ -274,16 +274,16 @@ export function CarteirePage() {
       case 'retido':   return { label: 'A Liberar (pós-checkout)', color: 'text-amber-600', icon: <Clock size={14} className="text-amber-500" /> }
       case 'liberado': return { label: 'Disponível para Saque', color: 'text-green-600', icon: <CheckCircle size={14} className="text-green-500" /> }
       case 'sacado':   return { label: 'Sacado', color: 'text-blue-500', icon: <ArrowUpRight size={14} className="text-blue-500" /> }
+      case 'estornado': return { label: 'Estornado', color: 'text-red-500', icon: <AlertCircle size={14} className="text-red-500" /> }
       default:         return { label: status, color: 'text-gray-500', icon: <Clock size={14} /> }
     }
   }
 
   const PIX_OPTIONS = [
-    { label: 'CPF', value: 'CPF' },
-    { label: 'E-mail', value: 'EMAIL' },
-    { label: 'Celular', value: 'PHONE' },
-    { label: 'Chave Aleatória', value: 'EVP' },
-    { label: 'CNPJ', value: 'CNPJ' },
+    { label: 'CPF', value: 'cpf' },
+    { label: 'E-mail', value: 'email' },
+    { label: 'Celular', value: 'telefone' },
+    { label: 'Chave Aleatória', value: 'chave_aleatoria' },
   ]
 
   return (
@@ -423,8 +423,8 @@ export function CarteirePage() {
         </section>
       </main>
 
-      {/* ── BottomSheet: Saque ───────────────────────────────────────────── */}
-      <BottomSheet open={isWithdrawOpen} onClose={() => setIsWithdrawOpen(false)} title="Solicitar Saque">
+      {/* ── Saque (modal no desktop, bottom sheet no mobile) ────────────────── */}
+      <ResponsiveSheet open={isWithdrawOpen} onClose={() => setIsWithdrawOpen(false)} title="Solicitar Saque">
         <div className="p-4 space-y-5">
           {/* Saldo disponível */}
           <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 flex items-center justify-between">
@@ -468,7 +468,9 @@ export function CarteirePage() {
             <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
               <p className="text-xs text-gray-500">PIX de destino</p>
               <p className="text-sm font-medium text-gray-800 mt-0.5">{pixKey}</p>
-              <p className="text-xs text-gray-400">{pixKeyType}</p>
+              <p className="text-xs text-gray-400">
+                {PIX_OPTIONS.find((opt) => opt.value === pixKeyType)?.label ?? pixKeyType}
+              </p>
             </div>
           )}
 
@@ -495,10 +497,10 @@ export function CarteirePage() {
             </Button>
           )}
         </div>
-      </BottomSheet>
+      </ResponsiveSheet>
 
-      {/* ── BottomSheet: Config PIX ──────────────────────────────────────── */}
-      <BottomSheet open={isConfigOpen} onClose={() => setIsConfigOpen(false)} title="Configurar Chave PIX">
+      {/* ── Config PIX (modal no desktop, bottom sheet no mobile) ───────────── */}
+      <ResponsiveSheet open={isConfigOpen} onClose={() => setIsConfigOpen(false)} title="Configurar Chave PIX">
         <div className="p-4 space-y-5">
           <p className="text-sm text-gray-600">
             Esta chave será usada para todos os saques. Certifique-se de que a conta está em <strong>seu nome</strong> — a ValidaPay valida a titularidade.
@@ -530,7 +532,7 @@ export function CarteirePage() {
             Salvar Chave PIX
           </Button>
         </div>
-      </BottomSheet>
+      </ResponsiveSheet>
     </div>
   )
 }

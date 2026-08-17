@@ -243,7 +243,7 @@ export default function EmpresaPerfilPage({ hideTopBar = false, companyIdOverrid
 
       {/* Company header */}
       <div className="max-w-5xl mx-auto px-4">
-        <div className="flex items-end justify-between -mt-10 relative z-10">
+        <div className="flex items-end -mt-10 relative z-10">
           <div className="rounded-full border-4 border-qe-white bg-qe-white shadow-qe-sm overflow-hidden">
             <Avatar
               src={company.profile_avatar ?? undefined}
@@ -252,16 +252,6 @@ export default function EmpresaPerfilPage({ hideTopBar = false, companyIdOverrid
               verified={isVerified}
             />
           </div>
-          <Button
-            variant="secondary"
-            size="sm"
-            className="shrink-0 font-bold text-[12px] uppercase tracking-wider"
-          >
-            <span className="flex items-center gap-1.5">
-              <Briefcase size={14} />
-              Seguir Empresa
-            </span>
-          </Button>
         </div>
 
         <div className="mt-3">
